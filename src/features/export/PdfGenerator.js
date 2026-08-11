@@ -81,10 +81,10 @@ export class PdfGenerator {
       // ── 2a. Clone the preview pane with strict light-mode styles ─────────
       clone = PdfCloneService.build();
 
-      // Wait two animation frames so the browser fully computes the clone's layout
-      // before we read any dimensions. Without this, getBoundingClientRect() can
-      // return stale values for elements that haven't been painted yet.
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      // Give the browser 100ms to fully compute the clone's layout before we
+      // read any dimensions. requestAnimationFrame alone is unreliable for long
+      // documents — getBoundingClientRect can return stale values on first paint.
+      await new Promise(r => setTimeout(r, 100));
 
       const elW = clone.offsetWidth;
       if (!elW) throw new Error('Nothing to render — the preview appears to be empty.');
@@ -96,9 +96,9 @@ export class PdfGenerator {
       // MUST happen before computePageBreaks so getBoundingClientRect is accurate.
       PdfLayoutService.lockElementDimensions(clone, pxPerMm, printH);
 
-      // Wait another frame after resizing SVGs so the browser re-calculates
-      // layout heights before we measure them for page-break calculation.
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      // Give the browser another 100ms to re-calculate layout after SVG resizing
+      // before we take measurements for page-break calculation.
+      await new Promise(r => setTimeout(r, 100));
 
       // Re-read elH NOW (after SVG resizing) — SVGs may be shorter, so the
       // document is shorter. Using the pre-resize elH would produce phantom pages.

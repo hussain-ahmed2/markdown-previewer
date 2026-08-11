@@ -1,0 +1,1507 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Markdown Previewer</title>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <script>
+      tailwind.config = { darkMode: "class" };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
+    />
+    <style>
+      .font-mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+      .font-sans {
+        font-family: "Inter", sans-serif;
+      }
+      .editor-pane {
+        resize: horizontal;
+        overflow: hidden;
+      }
+      .preview-pane {
+        overflow-y: auto;
+      }
+      @media (max-width: 768px) {
+        .editor-pane {
+          resize: vertical;
+        }
+      }
+      .prose pre {
+        background-color: #f6f8fa;
+        color: #24292e;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        overflow-x: auto;
+      }
+      .prose code {
+        background-color: #f1f1f1;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        font-size: 0.875em;
+      }
+      .prose pre code {
+        background-color: transparent;
+        padding: 0;
+        font-size: inherit;
+      }
+      .dark .prose code {
+        background-color: #374151;
+        color: #e5e7eb;
+      }
+      .dark .prose pre {
+        background-color: #1e1e1e;
+        color: #d4d4d4;
+      }
+      .dark .prose {
+        color: #e5e7eb;
+      }
+      .dark .prose h1,
+      .dark .prose h2,
+      .dark .prose h3,
+      .dark .prose h4 {
+        color: #f9fafb;
+      }
+      .dark .prose a {
+        color: #93c5fd;
+      }
+      .dark .prose strong {
+        color: #f9fafb;
+      }
+      .dark .prose blockquote {
+        border-left-color: #6b7280;
+        color: #9ca3af;
+      }
+      .dark .prose th {
+        background-color: #374151;
+        color: #f9fafb;
+      }
+      .dark .prose td {
+        border-color: #374151;
+      }
+      .dark .prose hr {
+        border-color: #374151;
+      }
+      .prose mark {
+        background-color: #fde68a;
+        color: #1f2937;
+        padding: 0 0.25em;
+        border-radius: 0.25rem;
+      }
+      .dark .prose mark {
+        background-color: #92400e;
+        color: #fef3c7;
+      }
+      .prose dl {
+        margin: 1rem 0;
+      }
+      .prose dt {
+        font-weight: 600;
+        color: #111827;
+      }
+      .dark .prose dt {
+        color: #f9fafb;
+      }
+      .prose dd {
+        margin: 0 0 0.5rem 1.5rem;
+      }
+      .mermaid-diagram {
+        display: flex;
+        justify-content: center;
+        margin: 1.5rem 0;
+        page-break-inside: avoid;
+      }
+      .mermaid-diagram svg {
+        max-width: 100%;
+        max-height: 220mm;
+        height: auto;
+      }
+      .mermaid-error {
+        color: #ef4444;
+        font-size: 0.875rem;
+      }
+      .hljs {
+        color: #24292e;
+        background: #fff;
+      }
+      .hljs-doctag,
+      .hljs-keyword,
+      .hljs-meta .hljs-keyword,
+      .hljs-template-tag,
+      .hljs-template-variable,
+      .hljs-type,
+      .hljs-variable.language_ {
+        color: #d73a49;
+      }
+      .hljs-title,
+      .hljs-title.class_,
+      .hljs-title.class_.inherited__,
+      .hljs-title.function_ {
+        color: #6f42c1;
+      }
+      .hljs-attr,
+      .hljs-attribute,
+      .hljs-literal,
+      .hljs-meta,
+      .hljs-number,
+      .hljs-operator,
+      .hljs-selector-attr,
+      .hljs-selector-class,
+      .hljs-selector-id,
+      .hljs-variable {
+        color: #005cc5;
+      }
+      .hljs-meta .hljs-string,
+      .hljs-regexp,
+      .hljs-string {
+        color: #032f62;
+      }
+      .hljs-built_in,
+      .hljs-symbol {
+        color: #e36209;
+      }
+      .hljs-code,
+      .hljs-comment,
+      .hljs-formula {
+        color: #6a737d;
+      }
+      .hljs-name,
+      .hljs-quote,
+      .hljs-selector-pseudo,
+      .hljs-selector-tag {
+        color: #22863a;
+      }
+      .hljs-subst {
+        color: #24292e;
+      }
+      .hljs-section {
+        color: #005cc5;
+        font-weight: 700;
+      }
+      .hljs-bullet {
+        color: #735c0f;
+      }
+      .hljs-emphasis {
+        color: #24292e;
+        font-style: italic;
+      }
+      .hljs-strong {
+        color: #24292e;
+        font-weight: 700;
+      }
+      .hljs-addition {
+        color: #22863a;
+        background-color: #f0fff4;
+      }
+      .hljs-deletion {
+        color: #b31d28;
+        background-color: #ffeef0;
+      }
+      .dark .hljs {
+        color: #c9d1d9;
+        background: #0d1117;
+      }
+      .dark .hljs-doctag,
+      .dark .hljs-keyword,
+      .dark .hljs-meta .hljs-keyword,
+      .dark .hljs-template-tag,
+      .dark .hljs-template-variable,
+      .dark .hljs-type,
+      .dark .hljs-variable.language_ {
+        color: #ff7b72;
+      }
+      .dark .hljs-title,
+      .dark .hljs-title.class_,
+      .dark .hljs-title.class_.inherited__,
+      .dark .hljs-title.function_ {
+        color: #d2a8ff;
+      }
+      .dark .hljs-attr,
+      .dark .hljs-attribute,
+      .dark .hljs-literal,
+      .dark .hljs-meta,
+      .dark .hljs-number,
+      .dark .hljs-operator,
+      .dark .hljs-selector-attr,
+      .dark .hljs-selector-class,
+      .dark .hljs-selector-id,
+      .dark .hljs-variable {
+        color: #79c0ff;
+      }
+      .dark .hljs-meta .hljs-string,
+      .dark .hljs-regexp,
+      .dark .hljs-string {
+        color: #a5d6ff;
+      }
+      .dark .hljs-built_in,
+      .dark .hljs-symbol {
+        color: #ffa657;
+      }
+      .dark .hljs-code,
+      .dark .hljs-comment,
+      .dark .hljs-formula {
+        color: #8b949e;
+      }
+      .dark .hljs-name,
+      .dark .hljs-quote,
+      .dark .hljs-selector-pseudo,
+      .dark .hljs-selector-tag {
+        color: #7ee787;
+      }
+      .dark .hljs-subst {
+        color: #c9d1d9;
+      }
+      .dark .hljs-section {
+        color: #1f6feb;
+        font-weight: 700;
+      }
+      .dark .hljs-bullet {
+        color: #f2cc60;
+      }
+      .dark .hljs-emphasis {
+        color: #c9d1d9;
+        font-style: italic;
+      }
+      .dark .hljs-strong {
+        color: #c9d1d9;
+        font-weight: 700;
+      }
+      .dark .hljs-addition {
+        color: #aff5b4;
+        background-color: #033a16;
+      }
+      .dark .hljs-deletion {
+        color: #ffdcd7;
+        background-color: #67060c;
+      }
+      .dark .prose pre code {
+        background-color: transparent;
+      }
+      @media print {
+        @page {
+          margin: 20mm;
+        }
+        html,
+        body {
+          background: #ffffff !important;
+        }
+        body > header,
+        #pdfModal,
+        #fileInput,
+        .editor-pane,
+        #previewHeader {
+          display: none !important;
+        }
+        main {
+          display: block !important;
+          height: auto !important;
+        }
+        .preview-pane {
+          display: block !important;
+          width: 100% !important;
+          height: auto !important;
+          overflow: visible !important;
+          padding: 0 !important;
+          background: #ffffff !important;
+        }
+        #preview {
+          width: 100% !important;
+          max-width: none !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: visible !important;
+          border-radius: 0;
+          box-shadow: none;
+          background: #ffffff !important;
+          color: #1f2937 !important;
+        }
+        #preview pre,
+        #preview code {
+          white-space: pre-wrap !important;
+          word-break: break-word !important;
+          overflow-x: visible !important;
+        }
+        #preview h1,
+        #preview h2,
+        #preview h3,
+        #preview h4,
+        #preview dt,
+        #preview strong {
+          color: #111827 !important;
+        }
+        #preview a {
+          color: #2563eb !important;
+        }
+        #preview pre,
+        #preview th,
+        #preview tr:nth-child(even) td,
+        #preview mark {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .mermaid-diagram {
+          overflow: visible !important;
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+          display: block !important;
+        }
+        .mermaid-diagram svg {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+          max-width: 100% !important;
+          max-height: 80vh !important;
+          height: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body class="font-sans bg-gray-50 min-h-screen dark:bg-gray-900">
+    <header
+      class="bg-white border-b border-gray-200 sticky top-0 z-10 dark:bg-gray-800 dark:border-gray-700"
+    >
+      <div
+        class="max-w-full mx-auto px-4 py-3 flex items-center justify-between"
+      >
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
+          Markdown Previewer
+        </h1>
+        <div class="flex items-center gap-2">
+          <button
+            id="loadExample"
+            class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+            aria-label="Load example markdown"
+          >
+            Load Example
+          </button>
+          <button
+            id="openFile"
+            class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+            aria-label="Open a markdown file"
+          >
+            Open File
+          </button>
+          <input
+            type="file"
+            id="fileInput"
+            accept=".md,.markdown,.txt,text/markdown,text/plain"
+            class="hidden"
+          />
+          <button
+            id="downloadPdf"
+            class="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            aria-label="Download as PDF"
+          >
+            Download PDF
+          </button>
+          <button
+            id="themeToggle"
+            class="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors dark:bg-gray-700 dark:hover:bg-gray-600"
+            aria-label="Toggle theme"
+          >
+            <svg
+              id="sunIcon"
+              class="w-5 h-5 text-gray-600 hidden dark:block dark:text-yellow-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+              ></path>
+            </svg>
+            <svg
+              id="moonIcon"
+              class="w-5 h-5 text-gray-600 dark:hidden"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+              ></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="flex h-[calc(100vh-64px)]">
+      <div
+        class="editor-pane w-1/2 border-r border-gray-200 bg-white flex flex-col min-w-0 dark:border-gray-700 dark:bg-gray-800"
+      >
+        <div
+          class="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-2 text-sm text-gray-500 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-400"
+        >
+          <span>Editor</span>
+          <kbd
+            class="px-2 py-0.5 bg-gray-200 rounded text-xs font-mono dark:bg-gray-700 dark:text-gray-200"
+            >Tab</kbd
+          >
+          indent ·
+          <kbd
+            class="px-2 py-0.5 bg-gray-200 rounded text-xs font-mono dark:bg-gray-700 dark:text-gray-200"
+            >Shift+Tab</kbd
+          >
+          unindent
+        </div>
+        <textarea
+          id="editor"
+          class="flex-1 font-mono text-sm p-4 resize-none outline-none focus:ring-0 bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+          placeholder="Write markdown here..."
+          spellcheck="false"
+        ></textarea>
+      </div>
+
+      <div
+        class="preview-pane w-1/2 bg-gray-50 flex flex-col min-w-0 dark:bg-gray-900"
+      >
+        <div
+          id="previewHeader"
+          class="px-3 py-2 bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700"
+        >
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-200"
+            >Preview</span
+          >
+        </div>
+        <div
+          id="preview"
+          class="flex-1 p-6 prose prose-gray max-w-none overflow-y-auto bg-white m-4 rounded-lg shadow-sm dark:bg-gray-800 dark:shadow-none"
+        ></div>
+      </div>
+    </main>
+
+    <div
+      id="pdfModal"
+      class="fixed inset-0 z-50 hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pdfModalTitle"
+    >
+      <div
+        id="pdfModalBackdrop"
+        class="absolute inset-0 bg-gray-900/50 dark:bg-black/60"
+      ></div>
+      <div class="relative flex items-center justify-center h-full p-4">
+        <div
+          class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6"
+        >
+          <h2
+            id="pdfModalTitle"
+            class="text-lg font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Export Document
+          </h2>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Choose how you'd like to export the preview.
+          </p>
+
+          <div
+            class="mt-4 mb-4 border border-gray-200 dark:border-gray-700 rounded-xl p-4 bg-gray-50 dark:bg-gray-800/50"
+          >
+            <h3
+              class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3"
+            >
+              Header & Footer Options (Window Print)
+            </h3>
+
+            <div class="space-y-3">
+              <div>
+                <label class="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="optHeader"
+                    class="w-4 h-4 text-blue-600 rounded border-gray-300"
+                    checked
+                  />
+                  <span class="ml-2 text-sm text-gray-700 dark:text-gray-300"
+                    >Include Date & Title Header</span
+                  >
+                </label>
+                <div class="mt-2 pl-6" id="headerTextWrapper">
+                  <input
+                    type="text"
+                    id="optHeaderTitle"
+                    value="Markdown Previewer"
+                    class="w-full text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    placeholder="Enter document title..."
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label class="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="optFooter"
+                    class="w-4 h-4 text-blue-600 rounded border-gray-300"
+                    checked
+                  />
+                  <span class="ml-2 text-sm text-gray-700 dark:text-gray-300"
+                    >Include Page Numbers Footer</span
+                  >
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 grid gap-3">
+            <button
+              id="pdfDirectBtn"
+              class="text-left p-4 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors dark:border-blue-900 dark:bg-blue-950 dark:hover:bg-blue-900"
+            >
+              <span class="block font-medium text-gray-900 dark:text-gray-100"
+                >Direct download</span
+              >
+              <span
+                class="block text-sm text-gray-500 dark:text-gray-400 mt-0.5"
+                >Generates a PDF file and saves it immediately. Fast and
+                convenient.</span
+              >
+            </button>
+            <button
+              id="pdfPrintBtn"
+              class="text-left p-4 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
+            >
+              <span class="block font-medium text-gray-900 dark:text-gray-100"
+                >Send to Printer</span
+              >
+              <span
+                class="block text-sm text-gray-500 dark:text-gray-400 mt-0.5"
+                >Opens the native print dialog for physical printing. Perfectly
+                preserves formatting.</span
+              >
+            </button>
+          </div>
+          <div id="pdfProgress" class="hidden mt-4">
+            <div
+              class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300"
+            >
+              <span id="pdfProgressText">Rendering...</span>
+              <span id="pdfProgressCount" class="font-mono text-xs"></span>
+            </div>
+            <div
+              class="mt-2 h-1.5 bg-gray-200 rounded-full dark:bg-gray-700 overflow-hidden"
+            >
+              <div
+                id="pdfProgressBar"
+                class="h-full bg-blue-600 rounded-full transition-all duration-150"
+                style="width: 0%"
+              ></div>
+            </div>
+          </div>
+          <div class="mt-5 flex justify-end">
+            <button
+              id="pdfCancelBtn"
+              class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked-footnote@1.4.0/dist/index.umd.js"></script>
+    <script>
+      const editor = document.getElementById("editor");
+      const preview = document.getElementById("preview");
+      const themeToggle = document.getElementById("themeToggle");
+      const sunIcon = document.getElementById("sunIcon");
+      const moonIcon = document.getElementById("moonIcon");
+      const loadExampleBtn = document.getElementById("loadExample");
+      const openFileBtn = document.getElementById("openFile");
+      const fileInput = document.getElementById("fileInput");
+      const downloadPdfBtn = document.getElementById("downloadPdf");
+
+      const exampleMarkdown = `# Markdown Previewer — Complete Example
+
+This document demonstrates **all supported Markdown features** in this previewer.
+
+---
+
+## Headings
+
+# Heading 1 (H1)
+## Heading 2 (H2)
+### Heading 3 (H3)
+#### Heading 4 (H4)
+##### Heading 5 (H5)
+###### Heading 6 (H6)
+
+---
+
+## Text Formatting
+
+**Bold text** using double asterisks
+*Italic text* using single asterisk
+~~Strikethrough~~ using double tildes
+\`Inline code\` using backticks
+**_Bold and italic_** combined
+==Highlighted text== (using ==mark==)
+
+---
+
+## Lists
+
+### Unordered List
+
+- First item
+- Second item
+  - Nested item
+  - Another nested item
+    - Deeply nested
+- Third item
+
+### Ordered List
+
+1. First step
+2. Second step
+   1. Sub-step A
+   2. Sub-step B
+3. Third step
+
+### Task List
+
+- [x] Completed task
+- [ ] Pending task
+- [ ] Another task
+  - [x] Sub-task done
+  - [ ] Sub-task pending
+
+---
+
+## Links & Images
+
+[External link](https://github.com) to GitHub
+[Relative link](#headings) to headings section
+![Alt text for image](https://picsum.photos/seed/markdown/600/300 "Image title tooltip")
+![Local image placeholder](https://picsum.photos/seed/example/400/200)
+
+---
+
+## Blockquotes
+
+> This is a blockquote.
+> It can span multiple lines.
+>
+> — Famous Author
+
+> **Nested blockquote**
+>
+> > This is nested inside another blockquote.
+> >
+> > > Even deeper nesting works.
+
+---
+
+## Code Blocks
+
+### JavaScript
+
+\`\`\`javascript
+function fibonacci(n) {
+  if (n <= 1) return n;
+  return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+console.log(fibonacci(10)); // 55
+\`\`\`
+
+### Python
+
+\`\`\`python
+def quicksort(arr):
+    if len(arr) <= 1:
+        return arr
+    pivot = arr[len(arr) // 2]
+    left = [x for x in arr if x < pivot]
+    middle = [x for x in arr if x == pivot]
+    right = [x for x in arr if x > pivot]
+    return quicksort(left) + middle + quicksort(right)
+
+print(quicksort([3,6,8,10,1,2,1]))
+\`\`\`
+
+### TypeScript (with type annotations)
+
+\`\`\`typescript
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  roles: string[];
+}
+
+const getUser = async (id: number): Promise<User | null> => {
+  const response = await fetch(\`/api/users/\${id}\`);
+  return response.ok ? response.json() : null;
+};
+\`\`\`
+
+### Plain text (no highlighting)
+
+\`\`\`
+No language specified
+Just plain text content
+\`\`\`
+
+---
+
+## Tables
+
+### Basic Table
+
+| Feature | Supported | Notes |
+|---------|:---------:|-------|
+| Headings | ✅ | H1-H6 |
+| Bold/Italic | ✅ | Standard syntax |
+| Code blocks | ✅ | With syntax highlighting |
+| Tables | ✅ | GFM style |
+| Task lists | ✅ | Checkbox rendering |
+| Math (KaTeX) | ✅ | Inline \$x^2\$ and block \$\$...\$\$ |
+
+### Alignment Table
+
+| Left Aligned | Centered | Right Aligned |
+|:-------------|:--------:|--------------:|
+| Cell 1       | Cell 2   | Cell 3        |
+| Long content | Middle   | $100.00       |
+| Data         | Align    | 99.9%         |
+
+### Complex Table
+
+| Name | Age | Skills | Active |
+|------|-----|--------|--------|
+| Alice | 28 | React, TypeScript, Node.js | ✅ |
+| Bob | 34 | Python, Django, PostgreSQL | ✅ |
+| Carol | 29 | Go, Kubernetes, gRPC | ❌ |
+
+---
+
+## Horizontal Rule
+
+Content above the rule.
+
+---
+
+Content below the rule.
+
+---
+
+## Footnotes
+
+Here is a footnote reference[^1].
+
+[^1]: This is the footnote content at the bottom.
+
+---
+
+## Definition Lists
+
+Term 1
+: Definition for term 1
+
+Term 2
+: Definition for term 2
+: Another definition for term 2
+
+---
+
+## Math (KaTeX)
+
+Inline math: the Pythagorean theorem is $a^2 + b^2 = c^2$.
+
+Display math:
+
+$$
+\int_0^\infty e^{-x^2} \, dx = \frac{\sqrt{\pi}}{2}
+$$
+
+---
+
+## Emphasis Variations
+
+- *Single asterisk italic*
+- _Single underscore italic_
+- **Double asterisk bold**
+- __Double underscore bold__
+- ***Triple asterisk bold italic***
+- ___Triple underscore bold italic___
+
+---
+
+## Escaping Characters
+
+\\*Not italic\\* — escaped asterisks
+\\# Not a heading — escaped hash
+\\\\ Backslash itself: \\\\\\\\
+
+---
+
+## HTML in Markdown (sanitized)
+
+<div class="custom-class">
+  <p>This HTML is sanitized by DOMPurify for security.</p>
+</div>
+
+<details>
+  <summary>Click to expand details</summary>
+  <p>Hidden content inside details/summary tags.</p>
+</details>
+
+---
+
+## Line Breaks & Paragraphs
+
+This is the first paragraph with some text.
+
+This is the second paragraph separated by a blank line.
+
+This line  
+ends with two spaces  
+for a hard line break.
+
+---
+
+## Automatic Links
+
+https://example.com
+mailto:user@example.com
+
+---
+
+## Summary
+
+This example covers **all standard Markdown features** plus **GitHub Flavored Markdown (GFM)** extensions supported by \`marked\`:
+
+- ✅ Headings (H1–H6)
+- ✅ Text formatting (bold, italic, strikethrough, code, highlight)
+- ✅ Lists (ordered, unordered, nested, task lists)
+- ✅ Links & images
+- ✅ Blockquotes (nested)
+- ✅ Code blocks (fenced, syntax highlighting)
+- ✅ Tables (with alignment)
+- ✅ Horizontal rules
+- ✅ Footnotes
+- ✅ Definition lists
+- ✅ Math (KaTeX)
+- ✅ Mermaid diagrams (fenced \`\`\`mermaid blocks)
+- ✅ HTML (sanitized)
+- ✅ Line breaks & paragraphs
+- ✅ Automatic links
+
+**Enjoy writing Markdown!** 🎉`;
+
+      marked.setOptions({
+        breaks: true,
+        gfm: true,
+      });
+
+      function escapeHtml(str) {
+        return str
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      const highlightExt = {
+        name: "highlight",
+        level: "inline",
+        start(src) {
+          return src.indexOf("==");
+        },
+        tokenizer(src) {
+          const m = src.match(/^==([^=\n]+)==/);
+          if (!m) return undefined;
+          return { type: "highlight", raw: m[0], text: m[1] };
+        },
+        renderer(token) {
+          return `<mark>${escapeHtml(token.text)}</mark>`;
+        },
+      };
+
+      const inlineMath = {
+        name: "inlineMath",
+        level: "inline",
+        start(src) {
+          let i = src.indexOf("$");
+          while (i !== -1 && src[i - 1] === "\\") i = src.indexOf("$", i + 1);
+          return i;
+        },
+        tokenizer(src) {
+          const m = src.match(/^(?!\$\$)\$(?!\s)([^$\n]+?)(?<!\s)\$/);
+          if (!m) return undefined;
+          return { type: "inlineMath", raw: m[0], text: m[1].trim() };
+        },
+        renderer(token) {
+          return katex.renderToString(token.text, { throwOnError: false });
+        },
+      };
+
+      const blockMath = {
+        name: "blockMath",
+        level: "block",
+        tokenizer(src) {
+          const m = src.match(/^\$\$([\s\S]+?)\$\$(?:\n|$)/);
+          if (!m) return undefined;
+          return { type: "blockMath", raw: m[0], text: m[1].trim() };
+        },
+        renderer(token) {
+          return katex.renderToString(token.text, {
+            throwOnError: false,
+            displayMode: true,
+          });
+        },
+      };
+
+      const defList = {
+        name: "defList",
+        level: "block",
+        tokenizer(src) {
+          const m = src.match(/^([^\n:][^\n]*)\n((?::.*(?:\n|$))+)/);
+          if (!m) return undefined;
+          const term = m[1].trim();
+          if (
+            !term ||
+            /^[#>]/.test(term) ||
+            /^(?:-{3,}|\*{3,}|_{3,})\s*$/.test(term)
+          )
+            return undefined;
+          const items = [];
+          let current = null;
+          for (const line of (m[1] + "\n" + m[2]).split("\n")) {
+            if (line.trim() === "") continue;
+            if (line.startsWith(":")) {
+              if (!current) current = { termTokens: [], defs: [] };
+              current.defs.push(this.lexer.inlineTokens(line.slice(1).trim()));
+            } else {
+              if (current) items.push(current);
+              current = {
+                termTokens: this.lexer.inlineTokens(line.trim()),
+                defs: [],
+              };
+            }
+          }
+          if (current) items.push(current);
+          return { type: "defList", raw: m[0], items };
+        },
+        renderer(token) {
+          const body = token.items
+            .map((it) => {
+              const dt = `<dt>${this.parser.parseInline(it.termTokens)}</dt>`;
+              const dd = it.defs
+                .map((d) => `<dd>${this.parser.parseInline(d)}</dd>`)
+                .join("");
+              return dt + dd;
+            })
+            .join("");
+          return `<dl>\n${body}\n</dl>\n`;
+        },
+      };
+
+      marked.use(markedFootnote());
+
+      marked.use({
+        extensions: [highlightExt, inlineMath, blockMath, defList],
+        renderer: {
+          code(token) {
+            const lang = (token.lang || "").trim();
+            const text = token.text.replace(/\n$/, "");
+            if (lang === "mermaid") {
+              return `<pre><code class="language-mermaid">${escapeHtml(text)}</code></pre>\n`;
+            }
+            if (lang && hljs.getLanguage(lang)) {
+              try {
+                const hl = hljs.highlight(text, { language: lang }).value;
+                return `<pre><code class="language-${escapeHtml(lang)} hljs">${hl}</code></pre>\n`;
+              } catch (e) {
+                /* fall through */
+              }
+            }
+            return `<pre><code${lang ? ` class="language-${escapeHtml(lang)}"` : ""}>${escapeHtml(text)}</code></pre>\n`;
+          },
+        },
+      });
+
+      function renderMarkdown() {
+        const html = marked.parse(editor.value);
+        preview.innerHTML = DOMPurify.sanitize(html, {
+          ADD_TAGS: [
+            "math",
+            "annotation",
+            "annotation-xml",
+            "mi",
+            "mn",
+            "mo",
+            "ms",
+            "mtext",
+            "mspace",
+            "msqrt",
+            "mroot",
+            "mfrac",
+            "mrow",
+            "msub",
+            "msup",
+            "msubsup",
+            "munder",
+            "mover",
+            "munderover",
+            "mtable",
+            "mtr",
+            "mtd",
+            "semantics",
+            "maction",
+          ],
+        });
+        renderMermaid();
+      }
+
+      function getMermaidConfig() {
+        const isDark = document.documentElement.classList.contains("dark");
+        return {
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: isDark ? "dark" : "default",
+          themeVariables: { fontFamily: "'Inter', sans-serif" },
+        };
+      }
+
+      let mermaidSeq = 0;
+
+      function getMermaidSource(raw) {
+        if (!document.documentElement.classList.contains("dark")) return raw;
+        return raw.replace(
+          /^\s*(style|classDef)\s+\S+\s+(?:fill|stroke|color):.*$/gm,
+          "",
+        );
+      }
+
+      async function renderMermaidDiagrams(wrappers) {
+        for (const w of wrappers) {
+          try {
+            const id = "mmd-" + ++mermaidSeq;
+            const { svg } = await mermaid.render(
+              id,
+              getMermaidSource(w.dataset.mermaid),
+            );
+            w.innerHTML = svg;
+          } catch (err) {
+            console.error("Mermaid render failed:", err);
+            w.innerHTML =
+              '<div class="mermaid-error">Failed to render Mermaid diagram</div>';
+          }
+        }
+      }
+
+      function renderMermaid() {
+        const wrappers = [];
+        preview
+          .querySelectorAll("pre code.language-mermaid")
+          .forEach((code) => {
+            const pre = code.closest("pre");
+            const w = document.createElement("div");
+            w.className = "mermaid-diagram";
+            w.dataset.mermaid = code.textContent.trim();
+            pre.replaceWith(w);
+            wrappers.push(w);
+          });
+        renderMermaidDiagrams(wrappers);
+      }
+
+      editor.addEventListener("input", renderMarkdown);
+
+      editor.addEventListener("keydown", (e) => {
+        if (e.key === "Tab") {
+          e.preventDefault();
+          const start = editor.selectionStart;
+          const end = editor.selectionEnd;
+          const value = editor.value;
+          editor.value =
+            value.substring(0, start) + "  " + value.substring(end);
+          editor.selectionStart = editor.selectionEnd = start + 2;
+          renderMarkdown();
+        }
+      });
+
+      loadExampleBtn.addEventListener("click", () => {
+        editor.value = exampleMarkdown;
+        renderMarkdown();
+        editor.focus();
+      });
+
+      openFileBtn.addEventListener("click", () => fileInput.click());
+
+      fileInput.addEventListener("change", (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          editor.value = ev.target.result;
+          renderMarkdown();
+          document.title = file.name + " — Markdown Previewer";
+        };
+        reader.onerror = () => alert("Failed to read file.");
+        reader.readAsText(file);
+        fileInput.value = "";
+      });
+
+      const pdfModal = document.getElementById("pdfModal");
+      const pdfModalBackdrop = document.getElementById("pdfModalBackdrop");
+      const pdfDirectBtn = document.getElementById("pdfDirectBtn");
+      const pdfPrintBtn = document.getElementById("pdfPrintBtn");
+      const optHeader = document.getElementById("optHeader");
+      const optFooter = document.getElementById("optFooter");
+      const optHeaderTitle = document.getElementById("optHeaderTitle");
+      const headerTextWrapper = document.getElementById("headerTextWrapper");
+
+      optHeader.addEventListener("change", (e) => {
+        if (e.target.checked) {
+          headerTextWrapper.classList.remove(
+            "opacity-50",
+            "pointer-events-none",
+          );
+        } else {
+          headerTextWrapper.classList.add("opacity-50", "pointer-events-none");
+        }
+      });
+
+      const pdfCancelBtn = document.getElementById("pdfCancelBtn");
+      const pdfProgress = document.getElementById("pdfProgress");
+      const pdfProgressText = document.getElementById("pdfProgressText");
+      const pdfProgressCount = document.getElementById("pdfProgressCount");
+      const pdfProgressBar = document.getElementById("pdfProgressBar");
+
+      function openPdfModal() {
+        pdfProgress.classList.add("hidden");
+        pdfDirectBtn.disabled = false;
+        pdfPrintBtn.disabled = false;
+        pdfModal.classList.remove("hidden");
+      }
+
+      function closePdfModal() {
+        pdfModal.classList.add("hidden");
+      }
+
+      function setProgress(frac, label) {
+        pdfProgress.classList.remove("hidden");
+        pdfProgressBar.style.width = Math.round(frac * 100) + "%";
+        pdfProgressCount.textContent = label;
+      }
+
+      function buildPdfClone() {
+        const clone = preview.cloneNode(true);
+        clone.removeAttribute("id");
+        clone.className = "prose prose-gray max-w-none bg-white";
+        clone.style.fontFamily = "'Inter', sans-serif";
+        clone.style.fontSize = "12pt";
+        clone.style.width = "170mm";
+        clone.style.padding = "0";
+        clone.style.margin = "0";
+        clone.style.boxSizing = "border-box";
+        clone.style.lineHeight = "1.6";
+        clone.style.color = "#1f2937";
+
+        const style = document.createElement("style");
+        style.textContent = `
+          .prose pre { background: #f6f8fa; color: #24292e; padding: 1rem; border-radius: 0.5rem; overflow-x: visible; white-space: pre-wrap; word-break: break-word; page-break-inside: avoid; }
+          .prose code { background: #f1f1f1; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875em; font-family: 'JetBrains Mono', monospace; word-break: break-word; }
+          .prose pre code { background: transparent; padding: 0; font-size: inherit; white-space: pre-wrap; word-break: break-word; }
+          .prose table { border-collapse: collapse; width: 100%; margin: 1rem 0; page-break-inside: auto; }
+          .prose th, .prose td { border: 1px solid #d1d5db; padding: 0.5rem 0.75rem; text-align: left; }
+          .prose th { background: #f3f4f6; font-weight: 600; }
+          .prose tr:nth-child(even) td { background: #f9fafb; }
+          .prose blockquote { border-left: 4px solid #3b82f6; padding-left: 1rem; margin: 1rem 0; color: #6b7280; font-style: italic; }
+          .prose h1 { font-size: 2rem; font-weight: 700; margin: 2rem 0 1rem; color: #111827; page-break-after: avoid; }
+          .prose h2 { font-size: 1.5rem; font-weight: 600; margin: 1.75rem 0 0.75rem; color: #1f2937; page-break-after: avoid; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; }
+          .prose h3 { font-size: 1.25rem; font-weight: 600; margin: 1.5rem 0 0.5rem; color: #374151; page-break-after: avoid; }
+          .prose h4 { font-size: 1.125rem; font-weight: 600; margin: 1.25rem 0 0.5rem; color: #374151; page-break-after: avoid; }
+          .prose p { margin: 0.75rem 0; }
+          .prose ul, .prose ol { margin: 0.75rem 0; padding-left: 1.5rem; }
+          .prose li { margin: 0.25rem 0; }
+          .prose img { max-width: 100%; height: auto; border-radius: 0.5rem; }
+          .prose hr { border: none; border-top: 2px solid #e5e7eb; margin: 2rem 0; }
+          .prose a { color: #2563eb; text-decoration: underline; }
+          .prose strong { font-weight: 600; }
+          .prose em { font-style: italic; }
+          .prose del { text-decoration: line-through; }
+          @media print {
+            .prose { padding: 0; }
+            .prose pre { background: #f6f8fa !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .prose code { background: #f1f1f1 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .prose th { background: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .prose tr:nth-child(even) td { background: #f9fafb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        `;
+        clone.prepend(style);
+        document.body.appendChild(clone);
+        return clone;
+      }
+
+      async function exportDocument(action) {
+        pdfDirectBtn.disabled = true;
+        pdfPrintBtn.disabled = true;
+        pdfProgressText.textContent = "Preparing content...";
+        pdfProgressBar.style.width = "2%";
+        pdfProgressCount.textContent = "";
+        pdfProgress.classList.remove("hidden");
+
+        let clone = null;
+        try {
+          clone = buildPdfClone();
+
+          const { jsPDF } = window.jspdf;
+          const scale = 2;
+          const pageW = 210;
+          const pageH = 297;
+          const margin = 24;
+          const printW = pageW - margin * 2;
+          const printH = pageH - margin * 2;
+
+          const elW = clone.offsetWidth;
+          const elH = clone.scrollHeight;
+          if (!elW || !elH) throw new Error("Nothing to render");
+
+          const pxPerMm = elW / printW;
+          const maxSlicePxH = printH * pxPerMm;
+          const minFill = maxSlicePxH * 0.55;
+
+          const safeMaxHeight = maxSlicePxH * 0.9;
+          clone
+            .querySelectorAll(".mermaid-diagram svg, .prose img")
+            .forEach((el) => {
+              const rect = el.getBoundingClientRect();
+              if (rect.height > safeMaxHeight) {
+                const ratio = safeMaxHeight / rect.height;
+                const newW = rect.width * ratio;
+
+                if (el.tagName.toLowerCase() === "svg") {
+                  el.setAttribute("height", safeMaxHeight);
+                  el.setAttribute("width", newW);
+                }
+                el.style.height = safeMaxHeight + "px";
+                el.style.width = newW + "px";
+                el.style.maxHeight = safeMaxHeight + "px";
+                el.style.objectFit = "contain";
+              }
+            });
+
+          const bounds = [];
+          const cloneRect = clone.getBoundingClientRect();
+          clone
+            .querySelectorAll(
+              "p, h1, h2, h3, h4, h5, h6, pre, blockquote, ul, ol, table, tr, li, dl, dd, dt, section, figure, hr, .mermaid-diagram",
+            )
+            .forEach((el) => {
+              const rect = el.getBoundingClientRect();
+              bounds.push(rect.top - cloneRect.top - 2);
+              bounds.push(rect.bottom - cloneRect.top + 2);
+            });
+          bounds.push(0, elH);
+          bounds.sort((a, b) => a - b);
+
+          const starts = [0];
+          let current = 0;
+          while (current < elH - 1) {
+            const pageEnd = Math.min(current + maxSlicePxH, elH);
+            let next = pageEnd;
+            for (const b of bounds) {
+              if (b >= current + minFill && b <= pageEnd) next = b;
+            }
+            if (next <= current) next = pageEnd;
+            starts.push(next);
+            current = next;
+          }
+
+          const pdf = new jsPDF({
+            unit: "mm",
+            format: "a4",
+            orientation: "portrait",
+          });
+
+          const includeHeader = document.getElementById("optHeader").checked;
+          const headerTitle =
+            document.getElementById("optHeaderTitle").value ||
+            "Markdown Previewer";
+          const includeFooter = document.getElementById("optFooter").checked;
+          const dateStr = new Date().toLocaleDateString();
+
+          pdfProgressText.textContent = "Rendering document...";
+          await new Promise((r) => setTimeout(r, 50));
+
+          const fullCanvas = await html2canvas(clone, {
+            scale: scale,
+            useCORS: true,
+            logging: false,
+            width: elW,
+            height: elH,
+            windowWidth: document.documentElement.clientWidth,
+            onclone: (doc) => {
+              doc.documentElement.classList.remove("dark");
+            },
+          });
+
+          const tempCanvas = document.createElement("canvas");
+          tempCanvas.width = fullCanvas.width;
+          const ctx = tempCanvas.getContext("2d", { alpha: false });
+
+          for (let i = 0; i < starts.length - 1; i++) {
+            const offset = starts[i];
+            const slicePxH = starts[i + 1] - offset;
+
+            await new Promise((r) => setTimeout(r, 0));
+            setProgress(
+              (i + 1) / (starts.length - 1),
+              i + 1 + " / " + (starts.length - 1),
+            );
+
+            tempCanvas.height = slicePxH * scale;
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            ctx.drawImage(
+              fullCanvas,
+              0,
+              offset * scale,
+              fullCanvas.width,
+              slicePxH * scale,
+              0,
+              0,
+              tempCanvas.width,
+              tempCanvas.height,
+            );
+
+            const imgData = tempCanvas.toDataURL("image/jpeg", 0.98);
+            const imgHmm = slicePxH / pxPerMm;
+
+            if (i > 0) pdf.addPage();
+
+            pdf.addImage(imgData, "JPEG", margin, margin, printW, imgHmm);
+
+            if (includeHeader) {
+              pdf.setFontSize(9);
+              pdf.setTextColor(107, 114, 128);
+              pdf.text(dateStr, margin, margin - 8);
+              pdf.text(headerTitle, pageW - margin, margin - 8, {
+                align: "right",
+              });
+              pdf.setDrawColor(229, 231, 235);
+              pdf.line(margin, margin - 4, pageW - margin, margin - 4);
+            }
+
+            if (includeFooter) {
+              pdf.setFontSize(9);
+              pdf.setTextColor(107, 114, 128);
+              pdf.text(
+                `Page ${i + 1} of ${starts.length - 1}`,
+                pageW - margin,
+                pageH - margin + 9,
+                { align: "right" },
+              );
+              pdf.setDrawColor(229, 231, 235);
+              pdf.line(
+                margin,
+                pageH - margin + 4,
+                pageW - margin,
+                pageH - margin + 4,
+              );
+            }
+          }
+
+          if (action === "download") {
+            pdfProgressText.textContent = "Saving file...";
+            pdfProgressBar.style.width = "100%";
+            await new Promise((r) => setTimeout(r, 0));
+            pdf.save("markdown-preview.pdf");
+          } else if (action === "print") {
+            pdfProgressText.textContent = "Opening print dialog...";
+            pdfProgressBar.style.width = "100%";
+            await new Promise((r) => setTimeout(r, 0));
+
+            const blobUrl = pdf.output("bloburl");
+            const iframe = document.createElement("iframe");
+            iframe.style.display = "none";
+            iframe.src = blobUrl;
+            document.body.appendChild(iframe);
+
+            iframe.onload = () => {
+              setTimeout(() => {
+                iframe.contentWindow.print();
+              }, 100);
+            };
+          }
+
+          closePdfModal();
+        } catch (err) {
+          console.error("PDF generation failed:", err);
+          pdfProgressText.textContent =
+            "Failed to generate document. Please try again.";
+          pdfProgressCount.textContent = "";
+          pdfProgressBar.style.width = "0%";
+        } finally {
+          pdfDirectBtn.disabled = false;
+          pdfPrintBtn.disabled = false;
+          if (clone && clone.parentNode) {
+            clone.parentNode.removeChild(clone);
+          }
+        }
+      }
+
+      downloadPdfBtn.addEventListener("click", openPdfModal);
+      pdfDirectBtn.addEventListener("click", () => exportDocument("download"));
+      pdfPrintBtn.addEventListener("click", () => exportDocument("print"));
+      pdfCancelBtn.addEventListener("click", closePdfModal);
+      pdfModalBackdrop.addEventListener("click", closePdfModal);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !pdfModal.classList.contains("hidden")) {
+          closePdfModal();
+        }
+      });
+
+      const storedTheme = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia(
+        "(prefers-color-scheme: dark)",
+      ).matches;
+      if (storedTheme === "dark" || (!storedTheme && prefersDark)) {
+        document.documentElement.classList.add("dark");
+        sunIcon.classList.remove("hidden");
+        moonIcon.classList.add("hidden");
+      }
+      mermaid.initialize(getMermaidConfig());
+
+      themeToggle.addEventListener("click", () => {
+        const isDark = document.documentElement.classList.toggle("dark");
+        localStorage.setItem("theme", isDark ? "dark" : "light");
+        sunIcon.classList.toggle("hidden", !isDark);
+        moonIcon.classList.toggle("hidden", isDark);
+        mermaid.initialize(getMermaidConfig());
+        renderMermaidDiagrams(preview.querySelectorAll(".mermaid-diagram"));
+      });
+
+      editor.value = exampleMarkdown;
+      renderMarkdown();
+    </script>
+  </body>
+</html>
