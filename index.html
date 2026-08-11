@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Previewer</title>
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+<body class="font-sans bg-gray-50 min-h-screen dark:bg-gray-900">
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-10 dark:bg-gray-800 dark:border-gray-700">
+    <div class="max-w-full mx-auto px-4 py-3 flex items-center justify-between">
+      <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Markdown Previewer</h1>
+      <div class="flex items-center gap-2">
+        <button id="loadExample" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600" aria-label="Load example markdown">
+          Load Example
+        </button>
+        <button id="openFile" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600" aria-label="Open a markdown file">
+          Open File
+        </button>
+        <input type="file" id="fileInput" accept=".md,.markdown,.txt,text/markdown,text/plain" class="hidden">
+        <button id="downloadPdf" class="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors" aria-label="Download as PDF">
+          Download PDF
+        </button>
+        <button id="themeToggle" class="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors dark:bg-gray-700 dark:hover:bg-gray-600" aria-label="Toggle theme">
+          <svg id="sunIcon" class="w-5 h-5 text-gray-600 hidden dark:block dark:text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+          <svg id="moonIcon" class="w-5 h-5 text-gray-600 dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex h-[calc(100vh-64px)]">
+    <div class="editor-pane w-1/2 border-r border-gray-200 bg-white flex flex-col min-w-0 dark:border-gray-700 dark:bg-gray-800">
+      <div class="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-2 text-sm text-gray-500 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-400">
+        <span>Editor</span>
+        <kbd class="px-2 py-0.5 bg-gray-200 rounded text-xs font-mono dark:bg-gray-700 dark:text-gray-200">Tab</kbd> indent · <kbd class="px-2 py-0.5 bg-gray-200 rounded text-xs font-mono dark:bg-gray-700 dark:text-gray-200">Shift+Tab</kbd> unindent
+      </div>
+      <textarea
+        id="editor"
+        class="flex-1 font-mono text-sm p-4 resize-none outline-none focus:ring-0 bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+        placeholder="Write markdown here..."
+        spellcheck="false"
+      ></textarea>
+    </div>
+
+    <div class="preview-pane w-1/2 bg-gray-50 flex flex-col min-w-0 dark:bg-gray-900">
+      <div id="previewHeader" class="px-3 py-2 bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+        <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Preview</span>
+      </div>
+      <div id="preview" class="flex-1 p-6 prose prose-gray max-w-none overflow-y-auto bg-white m-4 rounded-lg shadow-sm dark:bg-gray-800 dark:shadow-none"></div>
+    </div>
+  </main>
+
+  <div id="pdfModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="pdfModalTitle">
+    <div id="pdfModalBackdrop" class="absolute inset-0 bg-gray-900/50 dark:bg-black/60"></div>
+    <div class="relative flex items-center justify-center h-full p-4">
+      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6">
+        <h2 id="pdfModalTitle" class="text-lg font-semibold text-gray-900 dark:text-gray-100">Export Document</h2>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Choose how you'd like to export the preview.</p>
+
+        <div class="mt-4 mb-4 border border-gray-200 dark:border-gray-700 rounded-xl p-4 bg-gray-50 dark:bg-gray-800/50">
+          <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Header & Footer Options (Window Print)</h3>
+          
+          <div class="space-y-3">
+            <div>
+              <label class="flex items-center cursor-pointer">
+                <input type="checkbox" id="optHeader" class="w-4 h-4 text-blue-600 rounded border-gray-300" checked>
+                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Include Date & Title Header</span>
+              </label>
+              <div class="mt-2 pl-6" id="headerTextWrapper">
+                <input type="text" id="optHeaderTitle" value="Markdown Previewer" class="w-full text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="Enter document title...">
+              </div>
+            </div>
+
+            <div>
+              <label class="flex items-center cursor-pointer">
+                <input type="checkbox" id="optFooter" class="w-4 h-4 text-blue-600 rounded border-gray-300" checked>
+                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Include Page Numbers Footer</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 grid gap-3">
+          <button id="pdfDirectBtn" class="text-left p-4 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors dark:border-blue-900 dark:bg-blue-950 dark:hover:bg-blue-900">
+            <span class="block font-medium text-gray-900 dark:text-gray-100">Direct download</span>
+            <span class="block text-sm text-gray-500 dark:text-gray-400 mt-0.5">Generates a PDF file and saves it immediately. Fast and convenient.</span>
+          </button>
+          <button id="pdfPrintBtn" class="text-left p-4 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800">
+            <span class="block font-medium text-gray-900 dark:text-gray-100">Send to Printer</span>
+            <span class="block text-sm text-gray-500 dark:text-gray-400 mt-0.5">Opens the native print dialog for physical printing. Perfectly preserves formatting.</span>
+          </button>
+        </div>
+        <div id="pdfProgress" class="hidden mt-4">
+          <div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+            <span id="pdfProgressText">Rendering...</span>
+            <span id="pdfProgressCount" class="font-mono text-xs"></span>
+          </div>
+          <div class="mt-2 h-1.5 bg-gray-200 rounded-full dark:bg-gray-700 overflow-hidden">
+            <div id="pdfProgressBar" class="h-full bg-blue-600 rounded-full transition-all duration-150" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="mt-5 flex justify-end">
+          <button id="pdfCancelBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked-footnote@1.4.0/dist/index.umd.js"></script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
