@@ -87,60 +87,67 @@ export class PdfCloneService {
     // flat and light-mode only.
     const style = document.createElement('style');
     style.textContent = `
+      /* ── Synchronization Fix ── */
+      /* html2canvas struggles with margin-collapse and Tailwind's :where() selectors. */
+      /* We eliminate margin-bottom completely and enforce explicit margin-top gaps. */
+      /* This mathematically guarantees DOM layouts perfectly match canvas rendering. */
+      .prose * { margin-bottom: 0 !important; }
+      .prose > *:first-child { margin-top: 0 !important; }
+
       /* ── Code blocks ── */
       .prose pre {
-        background: #f6f8fa;
-        color: #24292e;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        overflow-x: visible;
-        white-space: pre-wrap;
-        word-break: break-word;
+        margin-top: 1.7em !important;
+        background: #f6f8fa !important;
+        color: #24292e !important;
+        padding: 1rem !important;
+        border-radius: 0.5rem !important;
+        overflow-x: visible !important;
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
       }
       .prose code {
-        background: #f1f1f1;
-        padding: 0.125rem 0.375rem;
-        border-radius: 0.25rem;
-        font-size: 0.875em;
-        font-family: 'JetBrains Mono', monospace;
-        word-break: break-word;
+        background: #f1f1f1 !important;
+        padding: 0.125rem 0.375rem !important;
+        border-radius: 0.25rem !important;
+        font-size: 0.875em !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        word-break: break-word !important;
       }
-      /* Reset inline code inside fenced block — it must not double-background */
       .prose pre code {
-        background: transparent;
-        padding: 0;
-        font-size: inherit;
-        white-space: pre-wrap;
-        word-break: break-word;
+        background: transparent !important;
+        padding: 0 !important;
+        font-size: inherit !important;
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
       }
 
       /* ── Tables ── */
-      .prose table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
-      .prose th, .prose td { border: 1px solid #d1d5db; padding: 0.5rem 0.75rem; text-align: left; }
-      .prose th { background: #f3f4f6; font-weight: 600; }
-      .prose tr:nth-child(even) td { background: #f9fafb; }
+      .prose table { border-collapse: collapse !important; width: 100% !important; margin-top: 2em !important; }
+      .prose th, .prose td { border: 1px solid #d1d5db !important; padding: 0.5rem 0.75rem !important; text-align: left !important; }
+      .prose th { background: #f3f4f6 !important; font-weight: 600 !important; }
+      .prose tr:nth-child(even) td { background: #f9fafb !important; }
 
       /* ── Blockquotes ── */
       .prose blockquote {
-        border-left: 4px solid #3b82f6;
-        padding-left: 1rem;
-        margin: 1rem 0;
-        color: #6b7280;
-        font-style: italic;
+        border-left: 4px solid #3b82f6 !important;
+        padding-left: 1rem !important;
+        margin-top: 1.6em !important;
+        color: #6b7280 !important;
+        font-style: italic !important;
       }
 
       /* ── Headings ── */
-      .prose h1 { font-size: 2rem;   font-weight: 700; margin: 2rem 0 1rem;    color: #111827; }
-      .prose h2 { font-size: 1.5rem; font-weight: 600; margin: 1.75rem 0 0.75rem; color: #1f2937; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; }
-      .prose h3 { font-size: 1.25rem; font-weight: 600; margin: 1.5rem 0 0.5rem; color: #374151; }
-      .prose h4 { font-size: 1.125rem; font-weight: 600; margin: 1.25rem 0 0.5rem; color: #374151; }
+      .prose h1 { font-size: 2.25em !important; font-weight: 800 !important; margin-top: 2em !important; color: #111827 !important; line-height: 1.1 !important; }
+      .prose h2 { font-size: 1.5em !important; font-weight: 700 !important; margin-top: 2em !important; color: #1f2937 !important; border-bottom: 1px solid #e5e7eb !important; padding-bottom: 0.5rem !important; line-height: 1.3 !important; }
+      .prose h3 { font-size: 1.25em !important; font-weight: 600 !important; margin-top: 1.6em !important; color: #374151 !important; line-height: 1.6 !important; }
+      .prose h4 { font-size: 1.125em !important; font-weight: 600 !important; margin-top: 1.5em !important; color: #374151 !important; line-height: 1.5 !important; }
 
       /* ── Body copy ── */
-      .prose p  { margin: 0.75rem 0; }
-      .prose ul, .prose ol { margin: 0.75rem 0; padding-left: 1.5rem; }
-      .prose li { margin: 0.25rem 0; }
-      .prose img { max-width: 100%; height: auto; border-radius: 0.5rem; }
-      .prose hr  { border: none; border-top: 2px solid #e5e7eb; margin: 2rem 0; }
+      .prose p  { margin-top: 1.25em !important; line-height: 1.75 !important; }
+      .prose ul, .prose ol { margin-top: 1.25em !important; padding-left: 1.625em !important; }
+      .prose li { margin-top: 0.5em !important; }
+      .prose img { max-width: 100% !important; height: auto !important; border-radius: 0.5rem !important; margin-top: 2em !important; }
+      .prose hr  { border: none !important; border-top: 2px solid #e5e7eb !important; margin-top: 3em !important; }
       .prose a   { color: #2563eb; text-decoration: underline; }
       .prose strong { font-weight: 600; }
       .prose em     { font-style: italic; }

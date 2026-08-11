@@ -85,6 +85,13 @@ export class PdfLayoutService {
         el.style.width = newW + "px";
         el.style.maxHeight = safeMaxHeight + "px";
         el.style.objectFit = "contain";
+        
+        if (el.closest('.mermaid-diagram')) {
+          const container = el.closest('.mermaid-diagram');
+          container.style.height = safeMaxHeight + "px";
+          container.style.maxHeight = safeMaxHeight + "px";
+          container.style.overflow = "hidden";
+        }
       }
     });
   }
@@ -102,50 +109,117 @@ export class PdfLayoutService {
     const maxSlicePxH = printH * pxPerMm;
     const minFill = maxSlicePxH * 0.55;
 
-    const bounds = [];
-    const cloneRect = clone.getBoundingClientRect();
-    clone
-      .querySelectorAll(
-        "p, h1, h2, h3, h4, h5, h6, pre, blockquote, ul, ol, table, tr, li, dl, dd, dt, section, figure, hr, .mermaid-diagram",
-      )
-      .forEach((el) => {
-        // CRITICAL: Mermaid generates HTML elements (like <p>, <span>) inside SVG
-        // foreignObjects. If we include these internal elements in our bounds array,
-        // the algorithm will think it's safe to slice the page right through the
-        // middle of the diagram! We MUST exclude children of .mermaid-diagram.
-        if (
-          el !== el.closest(".mermaid-diagram") &&
-          el.closest(".mermaid-diagram")
-        ) {
-          return;
-        }
+    let bounds = [];
+    let mediaElements = [];
 
-        const rect = el.getBoundingClientRect();
-        bounds.push(rect.top - cloneRect.top - 2);
-        bounds.push(rect.bottom - cloneRect.top + 2);
-      });
-    bounds.push(0, elH);
-    bounds.sort((a, b) => a - b);
+    const getBounds = () => {
+      bounds = [];
+      mediaElements = [];
+      const cloneRect = clone.getBoundingClientRect();
+      clone
+        .querySelectorAll(
+          "p, h1, h2, h3, h4, h5, h6, pre, blockquote, ul, ol, table, tr, li, dl, dd, dt, section, figure, hr, .mermaid-diagram, .prose img",
+        )
+        .forEach((el) => {
+          if (
+            el !== el.closest(".mermaid-diagram") &&
+            el.closest(".mermaid-diagram")
+          ) {
+            return;
+          }
+
+          const rect = el.getBoundingClientRect();
+          const top = rect.top - cloneRect.top;
+          const bottom = rect.bottom - cloneRect.top;
+          bounds.push({ top, bottom });
+
+          if (el.classList.contains('mermaid-diagram') || el.classList.contains('img')) {
+            mediaElements.push({ top, bottom, el });
+          }
+        });
+    };
+
+    getBounds();
 
     const starts = [0];
     let current = 0;
     while (current < elH - 1) {
       const pageEnd = Math.min(current + maxSlicePxH, elH);
-      let next = pageEnd;
-      // Preferred: find a boundary that satisfies minFill
-      for (const b of bounds) {
-        if (b >= current + minFill && b <= pageEnd) next = b;
-      }
-
-      // Fallback: if no boundary satisfies minFill (meaning we'd have to hard-cut
-      // through the middle of an element), find ANY valid boundary on the page to
-      // safely push the crossing element to the next page.
-      if (next === pageEnd) {
-        for (const b of bounds) {
-          if (b > current && b <= pageEnd) next = b;
+      
+      // ── DYNAMIC SHRINK LOGIC ──────────────────────────────────────────────────
+      let didShrink = false;
+      for (const media of mediaElements) {
+        if (media.top > current && media.top < pageEnd && media.bottom > pageEnd) {
+          const availableSpace = pageEnd - media.top;
+          if (availableSpace >= maxSlicePxH * 0.4) {
+            const el = media.el;
+            const targetEl = el.classList.contains('mermaid-diagram') ? el.querySelector('svg') : el;
+            if (targetEl) {
+              const rect = targetEl.getBoundingClientRect();
+              const newH = availableSpace - 4; 
+              if (newH < rect.height) {
+                const ratio = newH / rect.height;
+                if (ratio >= 0.5) {
+                  const newW = rect.width * ratio;
+                  if (targetEl.tagName.toLowerCase() === 'svg') {
+                    targetEl.setAttribute('width', newW);
+                    targetEl.setAttribute('height', newH);
+                  }
+                  targetEl.style.setProperty('width', newW + 'px', 'important');
+                  targetEl.style.setProperty('height', newH + 'px', 'important');
+                  targetEl.style.setProperty('max-height', newH + 'px', 'important');
+                  
+                  if (el.classList.contains('mermaid-diagram')) {
+                    el.style.setProperty('height', newH + 'px', 'important');
+                    el.style.setProperty('max-height', newH + 'px', 'important');
+                    el.style.setProperty('overflow', 'hidden', 'important');
+                  }
+                  
+                  elH = clone.scrollHeight;
+                  getBounds();
+                  didShrink = true;
+                  break;
+                }
+              }
+            }
+          }
         }
       }
+      
+      if (didShrink) continue;
+      // ─────────────────────────────────────────────────────────────────────────
 
+      let next = pageEnd;
+      let validBreak = -1;
+      
+      // Preferred: find a boundary that satisfies minFill
+      for (const b of bounds) {
+        // Flat array bounds logic was mathematically flawed. 
+        // We now use the object structure ({top, bottom}) natively.
+        if (b.bottom <= pageEnd && b.bottom >= current + minFill) {
+          validBreak = Math.floor(b.bottom);
+        } else if (b.top < pageEnd && b.bottom > pageEnd - 10 && b.top >= current + minFill) {
+          validBreak = Math.floor(b.top);
+          break; // Found the crossing element, stop searching
+        }
+      }
+      
+      // Fallback: if no boundary satisfies minFill
+      if (validBreak === -1) {
+        for (const b of bounds) {
+          if (b.bottom <= pageEnd && b.bottom > current) {
+            validBreak = Math.floor(b.bottom);
+          } else if (b.top < pageEnd && b.bottom > pageEnd - 10 && b.top > current) {
+            validBreak = Math.floor(b.top);
+            break; // Found the crossing element, stop searching
+          }
+        }
+      }
+      
+      if (validBreak !== -1 && validBreak > current) {
+        next = validBreak;
+      }
+      
       if (next <= current) next = pageEnd;
       starts.push(next);
       current = next;
