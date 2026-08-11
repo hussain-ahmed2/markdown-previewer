@@ -70,25 +70,23 @@ export class PdfLayoutService {
   static lockElementDimensions(clone, pxPerMm, printH) {
     const maxSlicePxH = printH * pxPerMm;
     const safeMaxHeight = maxSlicePxH * 0.9;
-    
-    clone
-      .querySelectorAll(".mermaid-diagram svg, .prose img")
-      .forEach((el) => {
-        const rect = el.getBoundingClientRect();
-        if (rect.height > safeMaxHeight) {
-          const ratio = safeMaxHeight / rect.height;
-          const newW = rect.width * ratio;
 
-          if (el.tagName.toLowerCase() === "svg") {
-            el.setAttribute("height", safeMaxHeight);
-            el.setAttribute("width", newW);
-          }
-          el.style.height = safeMaxHeight + "px";
-          el.style.width = newW + "px";
-          el.style.maxHeight = safeMaxHeight + "px";
-          el.style.objectFit = "contain";
+    clone.querySelectorAll(".mermaid-diagram svg, .prose img").forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      if (rect.height > safeMaxHeight) {
+        const ratio = safeMaxHeight / rect.height;
+        const newW = rect.width * ratio;
+
+        if (el.tagName.toLowerCase() === "svg") {
+          el.setAttribute("height", safeMaxHeight);
+          el.setAttribute("width", newW);
         }
-      });
+        el.style.height = safeMaxHeight + "px";
+        el.style.width = newW + "px";
+        el.style.maxHeight = safeMaxHeight + "px";
+        el.style.objectFit = "contain";
+      }
+    });
   }
 
   /**
@@ -108,9 +106,20 @@ export class PdfLayoutService {
     const cloneRect = clone.getBoundingClientRect();
     clone
       .querySelectorAll(
-        "p, h1, h2, h3, h4, h5, h6, pre, blockquote, ul, ol, table, tr, li, dl, dd, dt, section, figure, hr, .mermaid-diagram"
+        "p, h1, h2, h3, h4, h5, h6, pre, blockquote, ul, ol, table, tr, li, dl, dd, dt, section, figure, hr, .mermaid-diagram",
       )
       .forEach((el) => {
+        // CRITICAL: Mermaid generates HTML elements (like <p>, <span>) inside SVG
+        // foreignObjects. If we include these internal elements in our bounds array,
+        // the algorithm will think it's safe to slice the page right through the
+        // middle of the diagram! We MUST exclude children of .mermaid-diagram.
+        if (
+          el !== el.closest(".mermaid-diagram") &&
+          el.closest(".mermaid-diagram")
+        ) {
+          return;
+        }
+
         const rect = el.getBoundingClientRect();
         bounds.push(rect.top - cloneRect.top - 2);
         bounds.push(rect.bottom - cloneRect.top + 2);
@@ -123,9 +132,20 @@ export class PdfLayoutService {
     while (current < elH - 1) {
       const pageEnd = Math.min(current + maxSlicePxH, elH);
       let next = pageEnd;
+      // Preferred: find a boundary that satisfies minFill
       for (const b of bounds) {
         if (b >= current + minFill && b <= pageEnd) next = b;
       }
+
+      // Fallback: if no boundary satisfies minFill (meaning we'd have to hard-cut
+      // through the middle of an element), find ANY valid boundary on the page to
+      // safely push the crossing element to the next page.
+      if (next === pageEnd) {
+        for (const b of bounds) {
+          if (b > current && b <= pageEnd) next = b;
+        }
+      }
+
       if (next <= current) next = pageEnd;
       starts.push(next);
       current = next;
