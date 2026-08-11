@@ -10,31 +10,40 @@
  * Problem 1 — SVG / Image bounding-box mismatch:
  *   html2canvas renders SVGs at their *intrinsic* pixel size, completely ignoring
  *   any CSS `max-width` or `max-height` rules. This means our boundary calculations
- *   (which come from `getBoundingClientRect`) and the actual canvas pixels are
+ *   (which come from getBoundingClientRect) and the actual canvas pixels are
  *   misaligned. Fix: we hard-wire width/height *attributes* on every SVG so
  *   html2canvas has no choice but to honour them.
  *
  * Problem 2 — Content slice-through:
  *   Naively slicing the canvas at fixed A4 intervals causes headings, code blocks,
- *   and diagrams to be cut in half between pages. Fix: we scan every block-level
- *   element and collect their top/bottom pixel offsets as "safe break boundaries",
- *   then select the last boundary that still keeps the page at least half-full.
+ *   and diagrams to be cut in half between pages.
+ *
+ *   Fix: a two-priority boundary search that ALWAYS prefers breaking AFTER a complete
+ *   element (safe), and only falls back to breaking BEFORE an element (also safe but
+ *   risks a slightly underfull page) when no bottom-edge break is available.
+ *   Top-edge breaks in the algorithm carry a generous 8px tolerance so sub-pixel
+ *   rounding errors in getBoundingClientRect never land the break mid-glyph.
  */
 export class PdfLayoutService {
   /**
    * Computes the pixel-per-mm conversion factor for the current clone.
    *
-   * The clone's CSS width is set to exactly `printW` mm (170 mm).
+   * The clone's CSS width is set to exactly `printW` mm (162 mm).
    * `offsetWidth` gives us the equivalent in device pixels.
-   * Dividing gives us the scaling factor we use to convert all subsequent
-   * mm measurements (margins, page height, etc.) into pixel coordinates.
+   * Dividing gives the scaling factor used to convert all subsequent mm measurements
+   * (margins, page height, etc.) into pixel coordinates.
+   *
+   * IMPORTANT: The clone width MUST equal `printW` mm so that this ratio is exact.
+   * A mismatch (e.g. clone = 170mm, printW = 162mm) causes every page to capture
+   * 5% too much content, overflowing the bottom of each PDF page.
    *
    * @param {HTMLElement} clone   - The mounted DOM clone.
    * @param {number}      printW  - Printable width in mm (A4 width minus both margins).
    * @returns {number} Pixels per millimetre.
    */
   static computePxPerMm(clone, printW) {
-    // clone.offsetWidth is in CSS pixels; printW is the reference mm value baked into clone's CSS width
+    // clone.offsetWidth is in CSS pixels; printW is the reference mm value baked
+    // into clone's CSS width property in PdfCloneService
     return clone.offsetWidth / printW;
   }
 
@@ -53,15 +62,15 @@ export class PdfLayoutService {
    *     (for SVGs) and inline `style` properties (for all elements).
    *     Attributes take precedence over stylesheets in html2canvas's rendering path.
    *
-   * @param {HTMLElement} clone       - The mounted DOM clone to mutate.
-   * @param {number}      pxPerMm    - Pixels per millimetre (from `computePxPerMm`).
-   * @param {number}      printH     - Printable page height in mm.
+   * @param {HTMLElement} clone    - The mounted DOM clone to mutate.
+   * @param {number}      pxPerMm  - Pixels per millimetre (from `computePxPerMm`).
+   * @param {number}      printH   - Printable page height in mm.
    */
   static lockElementDimensions(clone, pxPerMm, printH) {
-    // A single page's usable height in pixels. We cap at 90% to guarantee a
-    // small visual breathing room at the page boundary.
+    // Cap at 85% of page height (not 90%) so the element has visible margin before
+    // and after it on the page — a diagram touching the header/footer line looks bad
     const maxSlicePxH = printH * pxPerMm;
-    const safeMaxH = maxSlicePxH * 0.9;
+    const safeMaxH = maxSlicePxH * 0.85;
 
     clone.querySelectorAll('.mermaid-diagram svg, .prose img').forEach((el) => {
       const rect = el.getBoundingClientRect();
@@ -69,8 +78,7 @@ export class PdfLayoutService {
       let targetW = rect.width;
       let targetH = rect.height;
 
-      // If the element is taller than a single page, scale it down proportionally.
-      // We keep the aspect ratio so diagrams don't look squashed.
+      // Scale down to safeMaxH while preserving aspect ratio
       if (targetH > safeMaxH) {
         const ratio = safeMaxH / targetH;
         targetH = safeMaxH;
@@ -96,73 +104,108 @@ export class PdfLayoutService {
   /**
    * Calculates an ordered list of "safe page-break positions" in pixel space.
    *
-   * Algorithm:
-   *  1. Scan every block-level element in the clone and record both its `top` and
-   *     `bottom` pixel offsets relative to the clone's own top edge. A ±2px tolerance
-   *     is added so that adjacent elements with sub-pixel gaps don't cause missed breaks.
-   *  2. Add sentinel values 0 (document start) and `elH` (document end) so every
-   *     document maps to at least one page.
-   *  3. Sort all boundary candidates ascending.
-   *  4. Walk from `current = 0`, advancing by at most `maxSlicePxH` pixels per step.
-   *     At each step, find the *last* boundary value that is:
-   *       a. After `current + minFill` (page must be at least 55% full to prevent
-   *          orphaned tiny content at the top of a page), and
-   *       b. Before `current + maxSlicePxH` (must still fit on one page).
-   *     If no such boundary exists (e.g., a single unbreakable element is taller than
-   *     one full page), fall back to `pageEnd` and accept the hard cut.
-   *  5. Return the array of pixel offsets that mark each page's starting y-coordinate.
+   * Algorithm — two-priority boundary search:
    *
-   * @param {HTMLElement} clone       - The mounted DOM clone (post-dimension-lock).
-   * @param {number}      elH         - Total height of the clone in pixels.
-   * @param {number}      pxPerMm    - Pixels per millimetre.
-   * @param {number}      printH     - Printable page height in mm.
+   *  PRIORITY 1 — Break AFTER a complete element (bottom edge):
+   *    Guarantees the element is entirely on the current page. This is the ideal
+   *    break point. We take the LAST bottom edge in [minFill, pageEnd].
+   *
+   *  PRIORITY 2 — Break BEFORE an element starts (top edge − tolerance):
+   *    Pushes the element entirely to the next page. Used when no bottom-edge break
+   *    is available (e.g. the only element that fits is one whose bottom overruns
+   *    the page). Tolerance is 8px (not 2px) to guard against sub-pixel rounding.
+   *
+   *  FALLBACK — Hard cut at `pageEnd`:
+   *    Only triggered when a single element spans more than one full page (e.g. a
+   *    very long code block). The slice goes through the element — unavoidable.
+   *
+   *  minFill is set to 30% (not 55%) so the algorithm has maximum flexibility to
+   *  find a clean boundary. A 30%-full page is far better than a sliced heading.
+   *
+   * @param {HTMLElement} clone    - The mounted DOM clone (post-dimension-lock).
+   * @param {number}      elH      - Total scrollHeight of the clone in pixels.
+   * @param {number}      pxPerMm  - Pixels per millimetre.
+   * @param {number}      printH   - Printable page height in mm.
    * @returns {number[]} Ascending list of y-pixel offsets; length = number of pages + 1.
    */
   static computePageBreaks(clone, elH, pxPerMm, printH) {
     const maxSlicePxH = printH * pxPerMm;
-    // Pages must be at least 55% full before we consider breaking.
-    // This prevents a single heading or short paragraph from getting an entire page.
-    const minFill = maxSlicePxH * 0.55;
+    // 30% minimum fill — much more generous than 55%, maximising the chance of finding
+    // a clean boundary rather than falling back to a hard cut through content
+    const minFill = maxSlicePxH * 0.30;
 
-    // ── Step 1: Collect boundary candidates ──────────────────────────────────
+    // Tolerance added to top edges: 8px prevents sub-pixel rounding from landing
+    // the break inside the very first pixel of the next element
+    const TOP_TOLERANCE = 8;
+    const BOTTOM_TOLERANCE = 2;
+
+    // ── Collect boundary candidates ────────────────────────────────────────────
     const cloneRect = clone.getBoundingClientRect();
-    const bounds = [];
 
-    // We include all block-level and Mermaid elements. Inline elements (spans, em, etc.)
-    // are deliberately excluded — we never want to break mid-sentence.
+    // Two separate lists so we can prefer bottom-edge breaks (Priority 1) over
+    // top-edge breaks (Priority 2) within the same page range
+    const bottomEdges = []; // break AFTER element — element is fully on current page
+    const topEdges = [];    // break BEFORE element — element moves to next page
+
+    // Only block-level elements are included. Inline elements (span, a, em, strong)
+    // are intentionally excluded — we never want to break mid-sentence or mid-word.
     clone.querySelectorAll(
-      'p, h1, h2, h3, h4, h5, h6, pre, blockquote, ul, ol, table, tr, li, dl, dd, dt, section, figure, hr, .mermaid-diagram'
+      'p, h1, h2, h3, h4, h5, h6, pre, blockquote, ul, ol, table, figure, hr, .mermaid-diagram'
     ).forEach((el) => {
       const rect = el.getBoundingClientRect();
-      // top of element – small tolerance so the element isn't clipped right at its pixel edge
-      bounds.push(rect.top - cloneRect.top - 2);
-      // bottom of element + tolerance
-      bounds.push(rect.bottom - cloneRect.top + 2);
+      // Position relative to the clone's own top edge (not the viewport)
+      const relTop    = rect.top    - cloneRect.top;
+      const relBottom = rect.bottom - cloneRect.top;
+
+      // Bottom edge + small tolerance: ensures the element's last pixel is included
+      bottomEdges.push(relBottom + BOTTOM_TOLERANCE);
+
+      // Top edge − generous tolerance: prevents the break from landing on the
+      // element's first rendered pixels due to sub-pixel rounding
+      topEdges.push(relTop - TOP_TOLERANCE);
     });
 
-    // Sentinels: always include document start and end
-    bounds.push(0, elH);
-    bounds.sort((a, b) => a - b);
+    // Sentinels: always start at 0 and always end at the document bottom
+    bottomEdges.push(0, elH);
+    topEdges.push(0, elH);
 
-    // ── Step 2: Greedy forward-walk to pick optimal breaks ───────────────────
-    const pageStarts = [0]; // First page always starts at pixel 0
+    bottomEdges.sort((a, b) => a - b);
+    topEdges.sort((a, b) => a - b);
+
+    // ── Greedy forward-walk ────────────────────────────────────────────────────
+    const pageStarts = [0]; // First page always starts at the top of the document
     let current = 0;
 
     while (current < elH - 1) {
       const pageEnd = Math.min(current + maxSlicePxH, elH);
 
-      // Default: hard cut at pageEnd (only fallback if no safe boundary found)
-      let next = pageEnd;
+      // PRIORITY 1: find last bottom-edge in [current + minFill, pageEnd]
+      let bestBottom = -1;
+      for (const b of bottomEdges) {
+        if (b >= current + minFill && b <= pageEnd) bestBottom = b;
+      }
 
-      // Find the last safe boundary within this page's range
-      for (const b of bounds) {
-        if (b >= current + minFill && b <= pageEnd) {
-          // This boundary is valid — keep looking for a later one
-          next = b;
+      // PRIORITY 2: only needed if no bottom-edge break was found
+      let bestTop = -1;
+      if (bestBottom === -1) {
+        for (const t of topEdges) {
+          if (t >= current + minFill && t <= pageEnd) bestTop = t;
         }
       }
 
-      // Safety: if `next` didn't advance, force a hard cut to prevent infinite loop
+      let next;
+      if (bestBottom !== -1) {
+        // Ideal: break after a complete element
+        next = bestBottom;
+      } else if (bestTop !== -1) {
+        // Good: break before the next element starts
+        next = bestTop;
+      } else {
+        // Last resort: hard cut (element is taller than a full page)
+        next = pageEnd;
+      }
+
+      // Safety guard: prevent infinite loop if nothing advanced
       if (next <= current) next = pageEnd;
 
       pageStarts.push(next);

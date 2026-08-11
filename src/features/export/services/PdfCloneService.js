@@ -12,54 +12,57 @@ import { els } from '../../../utils/dom.js';
  *  - We must apply light-mode styles that would visually break the live preview.
  *  - html2canvas captures what is *visible in the DOM*, so we must control the
  *    element's style context absolutely.
- *  - Appending off-screen (left: -9999px) prevents any layout reflow impact.
+ *  - The clone is rendered absolutely off-screen (position: absolute; left: -99999px)
+ *    so the browser fully computes its layout (giving accurate scrollHeight and
+ *    getBoundingClientRect values) without it appearing on screen.
  */
 export class PdfCloneService {
   /**
-   * Builds and appends an off-screen DOM clone of the markdown preview.
+   * Builds and appends an absolutely-positioned, off-screen DOM clone of the preview.
    *
-   * The clone:
-   *  1. Strips the `id` attribute to avoid duplicate-ID conflicts.
-   *  2. Forces an exact `170mm` width (matching printW = 210mm - 2×20mm margins)
-   *     so the pixel-to-mm ratio we compute later is precise.
-   *  3. Injects a `<style>` tag with explicit light-mode overrides for every element
-   *     that html2canvas renders (code blocks, tables, blockquotes, etc.), since
-   *     html2canvas cannot honour CSS variables or Tailwind's `dark:` prefix.
-   *  4. Positions itself at `left: -9999px` so the browser lays it out normally
-   *     (giving us accurate `scrollHeight` / `getBoundingClientRect` values) without
-   *     being visible to the user.
+   * Critical implementation details:
+   *  1. `position: absolute; left: -99999px` — puts the clone completely off-screen
+   *     while still forcing the browser to fully compute its layout. Without this,
+   *     elements far below the viewport may return incorrect getBoundingClientRect values.
+   *  2. `width: CLONE_WIDTH_MM mm` — hard-codes the content width to exactly the
+   *     printable width. This is the reference dimension that pxPerMm is derived from.
+   *     IMPORTANT: The clone width in mm MUST equal the `printW` constant in PdfGenerator
+   *     so that pxPerMm = clone.offsetWidth / printW is accurate. A mismatch here
+   *     causes every page to capture slightly the wrong amount of content.
+   *  3. An injected `<style>` block forces light-mode colours for every element type,
+   *     because html2canvas cannot evaluate CSS variables or Tailwind's `dark:` utilities.
    *
    * @returns {HTMLElement} The mounted clone, ready for measurement and rendering.
    */
   static build() {
     const clone = els.preview.cloneNode(true);
-
-    // Remove id to avoid duplicate id conflicts in the document
     clone.removeAttribute('id');
-
-    // Matching Tailwind's prose utilities but in a self-contained clone
     clone.className = 'prose prose-gray max-w-none bg-white';
 
-    // Hard-code the font stack so html2canvas picks it up without needing
-    // CSS variables that it cannot resolve
+    // Position absolutely off-screen so the browser computes a full layout
+    // but the user never sees it flicker on screen
+    clone.style.position = 'absolute';
+    clone.style.left = '-99999px';
+    clone.style.top = '0';
+
+    // Hard-code the font stack so html2canvas picks it up without CSS variables
     clone.style.fontFamily = "'Inter', sans-serif";
     clone.style.fontSize = '12pt';
 
-    // Exactly 170mm = A4 (210mm) - left margin (24mm) - right margin (24mm) - a couple mm visual gutter
-    // This number is critical: it is the reference width for computing pxPerMm later
-    clone.style.width = '170mm';
+    // CRITICAL: This width MUST match printW (210 - 2×24 = 162mm) in PdfGenerator.
+    // pxPerMm = clone.offsetWidth / printW. If clone is 170mm but printW=162mm,
+    // pxPerMm is wrong and every page slice overflows its PDF page boundary.
+    clone.style.width = '162mm';
 
-    // No padding/margin – the PDF generator itself owns the margin via jsPDF.addImage offsets
+    // No padding or margin — PdfGenerator owns the margin via jsPDF.addImage offsets
     clone.style.padding = '0';
     clone.style.margin = '0';
     clone.style.boxSizing = 'border-box';
     clone.style.lineHeight = '1.6';
-
-    // Force light-mode text colour regardless of the OS/browser preference
     clone.style.color = '#1f2937';
 
-    // Inject explicit, light-mode-only styles. html2canvas cannot evaluate
-    // media queries or Tailwind class conditions so every rule must be explicit.
+    // Inject explicit, flat light-mode styles.
+    // html2canvas cannot evaluate CSS media queries or Tailwind class conditions.
     const style = document.createElement('style');
     style.textContent = `
       /* ── Code blocks ── */
@@ -81,7 +84,7 @@ export class PdfCloneService {
         font-family: 'JetBrains Mono', monospace;
         word-break: break-word;
       }
-      /* Inline code inside a fenced block must not inherit the block's background */
+      /* Inline code inside a fenced block must not inherit the block background */
       .prose pre code { background: transparent; padding: 0; font-size: inherit; white-space: pre-wrap; word-break: break-word; }
 
       /* ── Tables ── */
@@ -120,7 +123,6 @@ export class PdfCloneService {
     `;
     clone.prepend(style);
 
-    // Append off-screen so the browser computes real layout dimensions
     document.body.appendChild(clone);
     return clone;
   }

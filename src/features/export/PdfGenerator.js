@@ -81,16 +81,29 @@ export class PdfGenerator {
       // ── 2a. Clone the preview pane with strict light-mode styles ─────────
       clone = PdfCloneService.build();
 
+      // Wait two animation frames so the browser fully computes the clone's layout
+      // before we read any dimensions. Without this, getBoundingClientRect() can
+      // return stale values for elements that haven't been painted yet.
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
       const elW = clone.offsetWidth;
-      const elH = clone.scrollHeight;
-      if (!elW || !elH) throw new Error('Nothing to render — the preview appears to be empty.');
+      if (!elW) throw new Error('Nothing to render — the preview appears to be empty.');
 
       // ── 2b. Compute the pixel / mm ratio from the clone's known CSS width ─
       const pxPerMm = PdfLayoutService.computePxPerMm(clone, printW);
 
       // ── 2c. Lock SVG/image dimensions before measuring break boundaries ───
-      // Must happen BEFORE computePageBreaks so getBoundingClientRect is accurate
+      // MUST happen before computePageBreaks so getBoundingClientRect is accurate.
       PdfLayoutService.lockElementDimensions(clone, pxPerMm, printH);
+
+      // Wait another frame after resizing SVGs so the browser re-calculates
+      // layout heights before we measure them for page-break calculation.
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      // Re-read elH NOW (after SVG resizing) — SVGs may be shorter, so the
+      // document is shorter. Using the pre-resize elH would produce phantom pages.
+      const elH = clone.scrollHeight;
+      if (!elH) throw new Error('Nothing to render — the preview appears to be empty.');
 
       // ── 2d. Calculate where we can safely break between pages ─────────────
       const pageStarts = PdfLayoutService.computePageBreaks(clone, elH, pxPerMm, printH);
