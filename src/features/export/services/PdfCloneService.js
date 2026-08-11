@@ -1,4 +1,4 @@
-import { els } from '../../../utils/dom.js';
+import { els } from "../../../utils/dom.js";
 
 /**
  * @module PdfCloneService
@@ -50,42 +50,42 @@ export class PdfCloneService {
     //                     being clipped (getBoundingClientRect stays accurate)
     // pointer-events: none → click events pass through (just in case)
     // z-index: -9999 → below everything so user never sees a flash
-    const container = document.createElement('div');
+    const container = document.createElement("div");
     container.style.cssText = [
-      'position: fixed',
-      'top: 0',
-      'left: -99999px',
-      'width: 162mm',   // must match clone width and printW
-      'overflow: visible',
-      'pointer-events: none',
-      'z-index: -9999',
-    ].join('; ');
+      "position: fixed",
+      "top: 0",
+      "left: -99999px",
+      "width: 162mm", // must match clone width and printW
+      "overflow: visible",
+      "pointer-events: none",
+      "z-index: -9999",
+    ].join("; ");
     document.body.appendChild(container);
 
     // ── Clone the live preview ────────────────────────────────────────────────
     const clone = els.preview.cloneNode(true);
-    clone.removeAttribute('id');
-    clone.className = 'prose prose-gray max-w-none bg-white';
+    clone.removeAttribute("id");
+    clone.className = "prose prose-gray max-w-none bg-white";
 
     // Hard-code font stack — html2canvas doesn't resolve CSS variables or @font-face
     // references the same way the browser does, so we make it explicit
     clone.style.fontFamily = "'Inter', sans-serif";
-    clone.style.fontSize = '12pt';
+    clone.style.fontSize = "12pt";
 
     // CRITICAL: clone width must equal printW (162 mm) so that
     // pxPerMm = clone.offsetWidth / printW is the correct 1:1 ratio.
-    clone.style.width = '162mm';
-    clone.style.padding = '0';
-    clone.style.margin = '0';
-    clone.style.boxSizing = 'border-box';
-    clone.style.lineHeight = '1.6';
-    clone.style.color = '#1f2937'; // force light mode text
+    clone.style.width = "162mm";
+    clone.style.padding = "0";
+    clone.style.margin = "0";
+    clone.style.boxSizing = "border-box";
+    clone.style.lineHeight = "1.6";
+    clone.style.color = "#1f2937"; // force light mode text
 
     // ── Inject print styles ───────────────────────────────────────────────────
     // html2canvas cannot evaluate media queries, CSS variables, or Tailwind's
     // dark: prefix. Every rule that matters for PDF rendering must be explicitly
     // flat and light-mode only.
-    const style = document.createElement('style');
+    const style = document.createElement("style");
     style.textContent = `
       /* ── Synchronization Fix ── */
       /* html2canvas struggles with margin-collapse and Tailwind's :where() selectors. */
