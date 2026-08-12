@@ -6,13 +6,23 @@
 export const els = {
   editor: document.getElementById('editor'),
   preview: document.getElementById('preview'),
-  loadExampleBtn: document.getElementById('loadExample'),
-  openFileBtn: document.getElementById('openFile'),
-  fileInput: document.getElementById('fileInput'),
-  downloadPdfBtn: document.getElementById('downloadPdf'),
+  
+  // Toolbar
   themeToggle: document.getElementById('themeToggle'),
   sunIcon: document.getElementById('sunIcon'),
   moonIcon: document.getElementById('moonIcon'),
+  loadExampleBtn: document.getElementById('loadExample'),
+  openFileBtn: document.getElementById('openFile'),
+  fileInput: document.getElementById('fileInput'),
+  exportDropdown: document.getElementById('exportDropdown'),
+  exportMenuBtn: document.getElementById('exportMenuBtn'),
+  exportMenu: document.getElementById('exportMenu'),
+  downloadPdfBtn: document.getElementById('downloadPdf'),
+  exportImage: document.getElementById('exportImage'),
+  exportDocx: document.getElementById('exportDocx'),
+  exportMd: document.getElementById('exportMd'),
+
+  // Modals
   pdfModal: document.getElementById('pdfModal'),
   pdfModalBackdrop: document.getElementById('pdfModalBackdrop'),
   pdfCancelBtn: document.getElementById('pdfCancelBtn'),

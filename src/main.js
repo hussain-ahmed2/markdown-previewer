@@ -2,6 +2,7 @@ import { UIManager } from './features/ui/UIManager.js';
 import { MarkdownRenderer } from './features/preview/MarkdownRenderer.js';
 import { Editor } from './features/editor/Editor.js';
 import { PdfGenerator } from './features/export/PdfGenerator.js';
+import { ExportService } from './features/export/ExportService.js';
 import { DocumentStore } from './features/storage/DocumentStore.js';
 
 /**
@@ -13,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   MarkdownRenderer.init();
   Editor.init();
   PdfGenerator.init();
+  ExportService.init();
 
   if (!DocumentStore.load()) {
     DocumentStore.loadExample();

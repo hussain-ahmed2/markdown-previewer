@@ -11,6 +11,23 @@ export class UIManager {
   static init() {
     this.initTheme();
     this.setupEventListeners();
+    this.setupDropdowns();
+  }
+
+  static setupDropdowns() {
+    els.exportMenuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isExpanded = els.exportMenuBtn.getAttribute("aria-expanded") === "true";
+      els.exportMenuBtn.setAttribute("aria-expanded", !isExpanded);
+      els.exportMenu.classList.toggle("hidden");
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!els.exportDropdown?.contains(e.target)) {
+        els.exportMenuBtn.setAttribute("aria-expanded", "false");
+        els.exportMenu.classList.add("hidden");
+      }
+    });
   }
 
   /**
@@ -49,6 +66,12 @@ export class UIManager {
   static openPdfModal() {
     els.pdfModal.classList.remove("hidden");
     els.optHeaderTitle.value = "";
+    
+    // Close the dropdown menu if it's open
+    if (els.exportMenuBtn && els.exportMenu) {
+      els.exportMenuBtn.setAttribute("aria-expanded", "false");
+      els.exportMenu.classList.add("hidden");
+    }
   }
 
   /**
