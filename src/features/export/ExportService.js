@@ -11,42 +11,31 @@ export class ExportService {
   }
 
   /**
-   * Exports the preview as a PNG image using html2canvas.
+   * Exports the preview as a PNG image using html-to-image.
    */
   static async exportImage() {
     this.closeDropdown();
     
     try {
-      const canvas = await html2canvas(els.preview, {
-        scale: 2,
-        useCORS: true,
+      // Remove max-height constraints temporarily so the full scroll height is captured
+      const originalHeight = els.preview.style.height;
+      const originalMaxHeight = els.preview.style.maxHeight;
+      const originalOverflow = els.preview.style.overflow;
+      
+      els.preview.style.height = 'auto';
+      els.preview.style.maxHeight = 'none';
+      els.preview.style.overflow = 'visible';
+
+      const dataUrl = await window.htmlToImage.toPng(els.preview, {
+        pixelRatio: 2,
         backgroundColor: document.documentElement.classList.contains("dark") ? "#111827" : "#ffffff",
-        windowWidth: document.documentElement.clientWidth,
-        // When capturing scrolling elements, ensure we capture the full scroll height
-        windowHeight: els.preview.scrollHeight,
-        onclone: (clonedDoc, clonedElement) => {
-          // html2canvas passes (document, element) to onclone in newer versions, 
-          // but we can also just query it from the cloned document.
-          const previewClone = clonedDoc.getElementById('preview');
-          if (previewClone) {
-            // Remove constraints so it can expand fully in the clone iframe
-            previewClone.style.height = 'auto';
-            previewClone.style.maxHeight = 'none';
-            previewClone.style.overflow = 'visible';
-            
-            // Also ensure parents don't clip it
-            let parent = previewClone.parentElement;
-            while (parent && parent !== clonedDoc.body) {
-              parent.style.height = 'auto';
-              parent.style.maxHeight = 'none';
-              parent.style.overflow = 'visible';
-              parent = parent.parentElement;
-            }
-          }
-        }
       });
       
-      const dataUrl = canvas.toDataURL("image/png");
+      // Restore styles
+      els.preview.style.height = originalHeight;
+      els.preview.style.maxHeight = originalMaxHeight;
+      els.preview.style.overflow = originalOverflow;
+      
       const a = document.createElement("a");
       a.href = dataUrl;
       a.download = "markdown-preview.png";
@@ -71,33 +60,52 @@ export class ExportService {
       // 1. Convert SVGs (like Mermaid diagrams) to Base64 PNG Images
       // DOCX parsers often ignore or mangle raw SVGs, resulting in CSS text dumps.
       // We rasterize them using html2canvas from the LIVE DOM, then replace in tempDiv.
-      const liveSvgs = Array.from(els.preview.querySelectorAll("svg"));
-      const tempSvgs = Array.from(tempDiv.querySelectorAll("svg"));
+      const liveDiagrams = Array.from(els.preview.querySelectorAll(".mermaid-diagram"));
+      const tempDiagrams = Array.from(tempDiv.querySelectorAll(".mermaid-diagram"));
 
-      for (let i = 0; i < liveSvgs.length; i++) {
-        const liveSvg = liveSvgs[i];
-        const tempSvg = tempSvgs[i];
+      for (let i = 0; i < liveDiagrams.length; i++) {
+        const liveDiagram = liveDiagrams[i];
+        const tempDiagram = tempDiagrams[i];
 
         try {
-          // html2canvas works best on elements currently in the document
-          const canvas = await html2canvas(liveSvg, {
-            scale: 2,
-            useCORS: true,
+          const pngBase64 = await window.htmlToImage.toPng(liveDiagram, {
+            pixelRatio: 2,
             backgroundColor: document.documentElement.classList.contains("dark") ? "#111827" : "#ffffff",
           });
           
-          const pngBase64 = canvas.toDataURL("image/png");
           const newImg = document.createElement("img");
           newImg.src = pngBase64;
-          // DOCX parsers often ignore CSS for images and require explicit width/height attributes
-          newImg.setAttribute("width", Math.floor(canvas.width / 2));
-          newImg.setAttribute("height", Math.floor(canvas.height / 2));
           
-          tempSvg.parentNode.replaceChild(newImg, tempSvg);
+          // Compute width and height manually since htmlToImage doesn't return a canvas object
+          const rect = liveDiagram.getBoundingClientRect();
+          let imgWidth = Math.floor(rect.width);
+          let imgHeight = Math.floor(rect.height);
+          
+          // Cap width to prevent cropping in MS Word (A4 printable width is ~600px)
+          const MAX_WIDTH = 600;
+          if (imgWidth > MAX_WIDTH) {
+            const ratio = MAX_WIDTH / imgWidth;
+            imgWidth = MAX_WIDTH;
+            imgHeight = Math.floor(imgHeight * ratio);
+          }
+
+          // DOCX parsers require explicit width/height attributes
+          newImg.setAttribute("width", imgWidth);
+          newImg.setAttribute("height", imgHeight);
+          
+          // Keep styles as a fallback for smart parsers
+          newImg.style.maxWidth = "100%";
+          newImg.style.height = "auto";
+          newImg.style.display = "block";
+          newImg.style.margin = "0 auto";
+          
+          // Replace the diagram container's content with the image
+          tempDiagram.innerHTML = "";
+          tempDiagram.appendChild(newImg);
         } catch (err) {
-          console.error("Failed to rasterize SVG via html2canvas", err);
+          console.error("Failed to rasterize diagram via html2canvas", err);
           // If we can't rasterize it, remove it so it doesn't dump raw CSS/text into the DOCX
-          tempSvg.parentNode.removeChild(tempSvg);
+          tempDiagram.parentNode.removeChild(tempDiagram);
         }
       }
 

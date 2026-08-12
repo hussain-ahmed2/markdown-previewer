@@ -30,11 +30,9 @@ window.mermaid = {
   run: vi.fn(),
 };
 
-window.html2canvas = vi.fn(() => {
-  const canvas = document.createElement('canvas');
-  canvas.toDataURL = () => 'data:image/png;base64,mock';
-  return Promise.resolve(canvas);
-});
+window.htmlToImage = {
+  toPng: vi.fn(() => Promise.resolve('data:image/png;base64,mock'))
+};
 window.jspdf = { jsPDF: vi.fn() };
 window.htmlDocx = { asBlob: vi.fn(() => new Blob(['mock'], { type: 'application/docx' })) };
 window.URL.createObjectURL = vi.fn(() => 'blob:mock-url');

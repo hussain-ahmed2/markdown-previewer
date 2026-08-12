@@ -20,7 +20,9 @@ describe('ExportService', () => {
     // Setup preview DOM for SVGs
     els.preview.innerHTML = `
       <div class="content">
-        <svg id="test-svg" width="100" height="100"></svg>
+        <div class="mermaid-diagram">
+          <svg id="test-svg" width="100" height="100"></svg>
+        </div>
         <pre><code>some code</code></pre>
         <blockquote>Quote</blockquote>
       </div>
@@ -60,11 +62,12 @@ describe('ExportService', () => {
   });
 
   describe('exportImage()', () => {
-    it('should call html2canvas and trigger download', async () => {
+    it('should call htmlToImage and trigger download', async () => {
       await ExportService.exportImage();
       
-      expect(window.html2canvas).toHaveBeenCalled();
-      expect(clickSpy).toHaveBeenCalled();
+      expect(window.htmlToImage.toPng).toHaveBeenCalledWith(els.preview, expect.any(Object));
+      expect(document.createElement).toHaveBeenCalledWith('a');
+      expect(window.alert).not.toHaveBeenCalled();
     });
   });
 
@@ -72,8 +75,8 @@ describe('ExportService', () => {
     it('should convert SVGs to images, apply styles, and call htmlDocx', async () => {
       await ExportService.exportDocx();
       
-      // Should have called html2canvas to rasterize the <svg>
-      expect(window.html2canvas).toHaveBeenCalled();
+      // Should have called htmlToImage.toPng to rasterize the <svg>
+      expect(window.htmlToImage.toPng).toHaveBeenCalled();
       
       // Should have called htmlDocx.asBlob
       expect(window.htmlDocx.asBlob).toHaveBeenCalled();
