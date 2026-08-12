@@ -1,4 +1,4 @@
-import { UIManager } from '../../ui/UIManager.js';
+import { UIManager } from "../../ui/UIManager.js";
 
 /**
  * @module PdfRenderService
@@ -34,8 +34,8 @@ export class PdfRenderService {
     return html2canvas(clone, {
       // 2× scale = double the pixel density → sharper text and lines in the PDF
       scale: 2,
-      useCORS: true,         // allow cross-origin images (e.g. remote markdown images)
-      logging: false,        // suppress html2canvas debug output
+      useCORS: true, // allow cross-origin images (e.g. remote markdown images)
+      logging: false, // suppress html2canvas debug output
       width: elW,
       height: elH,
       // Match the window width so any responsive breakpoints in the clone resolve correctly
@@ -43,7 +43,7 @@ export class PdfRenderService {
       onclone: (doc) => {
         // html2canvas clones the document before rendering. Strip dark mode so
         // no `dark:` Tailwind utilities bleed into the PDF snapshot.
-        doc.documentElement.classList.remove('dark');
+        doc.documentElement.classList.remove("dark");
       },
     });
   }
@@ -75,15 +75,35 @@ export class PdfRenderService {
    * @returns {Promise<import('jspdf').jsPDF>} The fully populated jsPDF instance.
    */
   static async buildPdf(fullCanvas, pageStarts, pxPerMm, config, onProgress) {
-    const { pageW, pageH, margin, printW, includeHeader, headerTitle, includeFooter } = config;
+    const {
+      pageW,
+      pageH,
+      margin,
+      printW,
+      includeHeader,
+      headerTitle,
+      includeFooter,
+      footerText,
+      footerAlign,
+      fontFamily,
+      fontSize,
+      textColor,
+      padding,
+      headerBorder,
+      footerBorder,
+    } = config;
     const totalPages = pageStarts.length - 1;
 
     // A reusable off-screen canvas to crop each page slice into
-    const tempCanvas = document.createElement('canvas');
+    const tempCanvas = document.createElement("canvas");
     tempCanvas.width = fullCanvas.width; // same device-pixel width as the full canvas
-    const ctx = tempCanvas.getContext('2d', { alpha: false }); // alpha: false → faster fillRect
+    const ctx = tempCanvas.getContext("2d", { alpha: false }); // alpha: false → faster fillRect
 
-    const pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const pdf = new window.jspdf.jsPDF({
+      unit: "mm",
+      format: "a4",
+      orientation: "portrait",
+    });
     const dateStr = new Date().toLocaleDateString();
 
     for (let i = 0; i < totalPages; i++) {
@@ -98,7 +118,7 @@ export class PdfRenderService {
       // ── Crop this page strip from the monolithic canvas ───────────────────
       // tempCanvas height must match the slice (at 2× scale) so aspect ratio is preserved
       tempCanvas.height = slicePxH * 2; // ×2 because fullCanvas was rendered at scale: 2
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
       // drawImage(source, sx, sy, sw, sh, dx, dy, dw, dh):
@@ -108,41 +128,97 @@ export class PdfRenderService {
       //   Destination fills the full tempCanvas at 1:1
       ctx.drawImage(
         fullCanvas,
-        0, offsetPx * 2, fullCanvas.width, slicePxH * 2,  // source rect
-        0, 0, tempCanvas.width, tempCanvas.height          // dest rect
+        0,
+        offsetPx * 2,
+        fullCanvas.width,
+        slicePxH * 2, // source rect
+        0,
+        0,
+        tempCanvas.width,
+        tempCanvas.height, // dest rect
       );
 
       // ── Encode and insert into PDF ────────────────────────────────────────
-      const imgData = tempCanvas.toDataURL('image/jpeg', 0.98);
+      const imgData = tempCanvas.toDataURL("image/jpeg", 0.98);
       // Convert the slice height from CSS pixels → mm so jsPDF sizes it correctly
       const imgHeightMm = slicePxH / pxPerMm;
 
       if (i > 0) pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', margin, margin, printW, imgHeightMm);
+      pdf.addImage(imgData, "JPEG", margin, margin, printW, imgHeightMm);
+
+      // Helper to parse hex colors
+      const hexToRgb = (hex) => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result
+          ? [
+              parseInt(result[1], 16),
+              parseInt(result[2], 16),
+              parseInt(result[3], 16),
+            ]
+          : [107, 114, 128]; // default gray
+      };
+      const [r, g, b] = hexToRgb(textColor);
+
+      // Map font family
+      let jsPdfFont = "helvetica";
+      if (fontFamily.toLowerCase().includes("serif")) jsPdfFont = "times";
+      if (fontFamily.toLowerCase().includes("mono")) jsPdfFont = "courier";
 
       // ── Optional header ───────────────────────────────────────────────────
       if (includeHeader) {
-        // Separator line drawn 4mm above the content top (margin)
-        pdf.setDrawColor(229, 231, 235);
-        pdf.line(margin, margin - 4, pageW - margin, margin - 4);
+        // Separator line drawn at `padding` mm above the content top (margin)
+        if (headerBorder) {
+          pdf.setDrawColor(229, 231, 235);
+          pdf.line(margin, margin - padding, pageW - margin, margin - padding);
+        }
 
-        // Date on the left, title on the right, both 8mm above the content top
-        pdf.setFontSize(9);
-        pdf.setTextColor(107, 114, 128); // Tailwind gray-500
-        pdf.text(dateStr, margin, margin - 8);
-        pdf.text(headerTitle, pageW - margin, margin - 8, { align: 'right' });
+        pdf.setFont(jsPdfFont);
+        pdf.setFontSize(fontSize);
+        pdf.setTextColor(r, g, b);
+
+        // Date on the left, title on the right, drawn roughly (padding + 4) mm above content
+        const textY = margin - padding - 2;
+        pdf.text(dateStr, margin, textY);
+        pdf.text(headerTitle, pageW - margin, textY, { align: "right" });
       }
 
       // ── Optional footer ───────────────────────────────────────────────────
       if (includeFooter) {
-        // Separator line drawn 4mm below the content bottom
-        pdf.setDrawColor(229, 231, 235);
-        pdf.line(margin, pageH - margin + 4, pageW - margin, pageH - margin + 4);
+        // Separator line drawn at `padding` mm below the content bottom
+        if (footerBorder) {
+          pdf.setDrawColor(229, 231, 235);
+          pdf.line(
+            margin,
+            pageH - margin + padding,
+            pageW - margin,
+            pageH - margin + padding,
+          );
+        }
 
-        // Page number on the right, 9mm below the content bottom
-        pdf.setFontSize(9);
-        pdf.setTextColor(107, 114, 128);
-        pdf.text(`Page ${i + 1} of ${totalPages}`, pageW - margin, pageH - margin + 9, { align: 'right' });
+        pdf.setFont(jsPdfFont);
+        pdf.setFontSize(fontSize);
+        pdf.setTextColor(r, g, b);
+
+        // Text is drawn roughly (padding + 4) mm below the border
+        const textY = pageH - margin + padding + fontSize * 0.35;
+        const pageStr = `Page ${i + 1} of ${totalPages}`;
+
+        if (footerAlign === "space-between") {
+          pdf.text(footerText, margin, textY, { align: "left" });
+          pdf.text(pageStr, pageW - margin, textY, { align: "right" });
+        } else if (footerAlign === "left") {
+          pdf.text(`${footerText}   |   ${pageStr}`, margin, textY, {
+            align: "left",
+          });
+        } else if (footerAlign === "center") {
+          pdf.text(`${footerText}   |   ${pageStr}`, pageW / 2, textY, {
+            align: "center",
+          });
+        } else if (footerAlign === "right") {
+          pdf.text(`${footerText}   |   ${pageStr}`, pageW - margin, textY, {
+            align: "right",
+          });
+        }
       }
     }
 

@@ -68,32 +68,57 @@ export class PdfGenerator {
       UIManager.closePdfModal();
 
       const originalHTML = els.preview.innerHTML;
-      
-      const customFontFamily = els.optFontFamily?.value || 'Inter';
-      const customFontSize = els.optFontSize?.value || '12';
-      const customTextColor = els.optTextColor?.value || '#6b7280';
-      const customPadding = els.optPadding?.value || '5.5';
-      const customHeaderBorder = els.optHeaderBorder?.checked ? '1px solid #e5e7eb' : 'none';
-      const customFooterBorder = els.optFooterBorder?.checked ? '1px solid #e5e7eb' : 'none';
-      
-      const spacerHeightStr = (parseFloat(customPadding) * 2 + 14) + 'mm';
 
-      const fixedHeader = els.optHeader.checked ? `
+      const customFontFamily = els.optFontFamily?.value || "Inter";
+      const customFontSize = els.optFontSize?.value || "12";
+      const customTextColor = els.optTextColor?.value || "#6b7280";
+      const customPadding = els.optPadding?.value || "5.5";
+      const customHeaderBorder = els.optHeaderBorder?.checked
+        ? "1px solid #e5e7eb"
+        : "none";
+      const customFooterBorder = els.optFooterBorder?.checked
+        ? "1px solid #e5e7eb"
+        : "none";
+
+      const customFooterText =
+        els.optFooterText?.value || "Document exported from Markdown Previewer";
+      const customFooterAlign = els.optFooterAlign?.value || "space-between";
+
+      const flexJustify =
+        customFooterAlign === "left"
+          ? "flex-start"
+          : customFooterAlign === "center"
+            ? "center"
+            : customFooterAlign === "right"
+              ? "flex-end"
+              : "space-between";
+
+      const spacerHeightStr = parseFloat(customPadding) * 2 + 14 + "mm";
+
+      const fixedHeader = els.optHeader.checked
+        ? `
         <div style="position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: ${customPadding}mm 20mm; font-size: ${customFontSize}px; color: ${customTextColor}; font-family: ${customFontFamily}, sans-serif; border-bottom: ${customHeaderBorder}; background: white; z-index: 1000;">
           <span>${new Date().toLocaleDateString()}</span>
-          <span>${els.optHeaderTitle.value.trim() || 'Markdown Previewer'}</span>
+          <span>${els.optHeaderTitle.value.trim() || "Markdown Previewer"}</span>
         </div>
-      ` : '';
+      `
+        : "";
 
-      const fixedFooter = els.optFooter.checked ? `
-        <div style="position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: flex-end; align-items: center; padding: ${customPadding}mm 20mm; font-size: ${customFontSize}px; color: ${customTextColor}; font-family: ${customFontFamily}, sans-serif; border-top: ${customFooterBorder}; background: white; z-index: 1000;">
-          <span>Document exported from Markdown Previewer</span>
+      const fixedFooter = els.optFooter.checked
+        ? `
+        <div style="position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: ${flexJustify}; align-items: center; padding: ${customPadding}mm 20mm; font-size: ${customFontSize}px; color: ${customTextColor}; font-family: ${customFontFamily}, sans-serif; border-top: ${customFooterBorder}; background: white; z-index: 1000;">
+          <span>${customFooterText}</span>
         </div>
-      ` : '';
+      `
+        : "";
 
       // The spaces reserve physical room on every printed page so content doesn't overlap the fixed elements.
-      const topSpacer = els.optHeader.checked ? `<div style="height: ${spacerHeightStr};"></div>` : `<div style="height: 20mm;"></div>`;
-      const bottomSpacer = els.optFooter.checked ? `<div style="height: ${spacerHeightStr};"></div>` : `<div style="height: 20mm;"></div>`;
+      const topSpacer = els.optHeader.checked
+        ? `<div style="height: ${spacerHeightStr};"></div>`
+        : `<div style="height: 20mm;"></div>`;
+      const bottomSpacer = els.optFooter.checked
+        ? `<div style="height: ${spacerHeightStr};"></div>`
+        : `<div style="height: 20mm;"></div>`;
 
       els.preview.innerHTML = `
         ${fixedHeader}
@@ -189,6 +214,16 @@ export class PdfGenerator {
         includeHeader: els.optHeader.checked,
         headerTitle: els.optHeaderTitle.value.trim() || "Markdown Previewer",
         includeFooter: els.optFooter.checked,
+        footerText:
+          els.optFooterText?.value ||
+          "Document exported from Markdown Previewer",
+        footerAlign: els.optFooterAlign?.value || "space-between",
+        fontFamily: els.optFontFamily?.value || "Inter",
+        fontSize: parseInt(els.optFontSize?.value) || 12,
+        textColor: els.optTextColor?.value || "#6b7280",
+        padding: parseFloat(els.optPadding?.value) || 5.5,
+        headerBorder: els.optHeaderBorder?.checked !== false,
+        footerBorder: els.optFooterBorder?.checked !== false,
       };
 
       const pdf = await PdfRenderService.buildPdf(

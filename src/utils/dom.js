@@ -30,5 +30,7 @@ export const els = {
   optFontFamily: document.getElementById('optFontFamily'),
   optFontSize: document.getElementById('optFontSize'),
   optTextColor: document.getElementById('optTextColor'),
-  optPadding: document.getElementById('optPadding')
+  optPadding: document.getElementById('optPadding'),
+  optFooterText: document.getElementById('optFooterText'),
+  optFooterAlign: document.getElementById('optFooterAlign')
 };
