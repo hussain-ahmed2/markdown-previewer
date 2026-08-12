@@ -81,6 +81,55 @@ export class PdfCloneService {
     clone.style.lineHeight = "1.6";
     clone.style.color = "#1f2937"; // force light mode text
 
+    // ── Ultimate Fix for html2canvas List Marker Bug ─────────────────────────
+    // html2canvas notoriously misaligns list markers (::marker, list-style).
+    // The CSS fixes often fail depending on the browser version. The only 100%
+    // reliable fix is to disable native markers and inject real DOM spans.
+    const lists = clone.querySelectorAll("ul, ol");
+    lists.forEach((list) => {
+      list.style.setProperty("list-style-type", "none", "important");
+      list.style.setProperty("padding-left", "1.625em", "important");
+      const isOrdered = list.tagName.toLowerCase() === "ol";
+
+      Array.from(list.children).forEach((li, index) => {
+        if (li.tagName.toLowerCase() === "li") {
+          li.style.setProperty("position", "relative", "important");
+          li.style.setProperty("list-style-type", "none", "important");
+
+          const markerSpan = document.createElement("span");
+          markerSpan.style.cssText =
+            "position: absolute; left: -1.625em; top: 0; display: inline-block; width: 1.25em; text-align: right; font-variant-numeric: tabular-nums;";
+
+          if (isOrdered) {
+            markerSpan.textContent = `${index + 1}.`;
+            markerSpan.style.color = "#374151"; // Tailwind prose ol color
+            markerSpan.style.fontWeight = "400";
+          } else {
+            markerSpan.textContent = "•";
+            markerSpan.style.color = "#d1d5db"; // Tailwind prose ul color
+            markerSpan.style.fontWeight = "bold";
+          }
+
+          // To ensure alignment with wrapped <p> tags inside li,
+          // we attach it directly inside the <p> if it exists.
+          let target = li;
+          if (
+            li.firstElementChild &&
+            li.firstElementChild.tagName.toLowerCase() === "p"
+          ) {
+            target = li.firstElementChild;
+            target.style.setProperty("position", "relative", "important");
+            markerSpan.style.top = "0"; // Align precisely to the paragraph's top
+          } else {
+            // Strip any inherited margins if it's plain text
+            li.style.setProperty("margin-top", "0", "important");
+          }
+
+          target.insertBefore(markerSpan, target.firstChild);
+        }
+      });
+    });
+
     // ── Inject print styles ───────────────────────────────────────────────────
     // html2canvas cannot evaluate media queries, CSS variables, or Tailwind's
     // dark: prefix. Every rule that matters for PDF rendering must be explicitly
@@ -92,7 +141,7 @@ export class PdfCloneService {
       /* We eliminate margin-bottom completely and enforce explicit margin-top gaps. */
       /* This mathematically guarantees DOM layouts perfectly match canvas rendering. */
       .prose * { margin-bottom: 0 !important; }
-      .prose > *:first-child { margin-top: 0 !important; }
+      .prose *:first-child { margin-top: 0 !important; }
 
       /* ── Code blocks ── */
       .prose pre {
@@ -112,6 +161,11 @@ export class PdfCloneService {
         font-size: 0.875em !important;
         font-family: 'JetBrains Mono', monospace !important;
         word-break: break-word !important;
+        vertical-align: baseline !important;
+      }
+      .prose code::before, .prose code::after {
+        display: none !important;
+        content: "" !important;
       }
       .prose pre code {
         background: transparent !important;
@@ -138,7 +192,7 @@ export class PdfCloneService {
 
       /* ── Headings ── */
       .prose h1 { font-size: 2.25em !important; font-weight: 800 !important; margin-top: 2em !important; color: #111827 !important; line-height: 1.1 !important; }
-      .prose h2 { font-size: 1.5em !important; font-weight: 700 !important; margin-top: 2em !important; color: #1f2937 !important; border-bottom: 1px solid #e5e7eb !important; padding-bottom: 0.5rem !important; line-height: 1.3 !important; }
+      .prose h2 { font-size: 1.5em !important; font-weight: 700 !important; margin-top: 2em !important; color: #1f2937 !important; line-height: 1.3 !important; }
       .prose h3 { font-size: 1.25em !important; font-weight: 600 !important; margin-top: 1.6em !important; color: #374151 !important; line-height: 1.6 !important; }
       .prose h4 { font-size: 1.125em !important; font-weight: 600 !important; margin-top: 1.5em !important; color: #374151 !important; line-height: 1.5 !important; }
 

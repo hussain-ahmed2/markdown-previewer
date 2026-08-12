@@ -1,8 +1,8 @@
-import { els } from '../../utils/dom.js';
-import { UIManager } from '../ui/UIManager.js';
-import { PdfCloneService } from './services/PdfCloneService.js';
-import { PdfLayoutService } from './services/PdfLayoutService.js';
-import { PdfRenderService } from './services/PdfRenderService.js';
+import { els } from "../../utils/dom.js";
+import { UIManager } from "../ui/UIManager.js";
+import { PdfCloneService } from "./services/PdfCloneService.js";
+import { PdfLayoutService } from "./services/PdfLayoutService.js";
+import { PdfRenderService } from "./services/PdfRenderService.js";
 
 /**
  * @module PdfGenerator
@@ -40,8 +40,12 @@ export class PdfGenerator {
    * Called once during application initialisation.
    */
   static init() {
-    els.pdfDirectBtn.addEventListener('click', () => this.exportDocument('download'));
-    els.pdfPrintBtn.addEventListener('click', () => this.exportDocument('print'));
+    els.pdfDirectBtn.addEventListener("click", () =>
+      this.exportDocument("download"),
+    );
+    els.pdfPrintBtn.addEventListener("click", () =>
+      this.exportDocument("print"),
+    );
   }
 
   /**
@@ -60,20 +64,29 @@ export class PdfGenerator {
    *   'print'    → inject the PDF into a hidden iframe and call `window.print()`
    */
   static async exportDocument(action) {
+    // If the user wants to print, bypass the entire html2canvas pipeline
+    // and use the browser's native C++ print engine via the @media print CSS.
+    if (action === "print") {
+      UIManager.closePdfModal();
+      // Brief timeout to let the modal fade out before freezing the UI with the print dialog
+      setTimeout(() => window.print(), 150);
+      return;
+    }
+
     // ── 1. UI: show progress, lock buttons ───────────────────────────────────
     els.pdfDirectBtn.disabled = true;
     els.pdfPrintBtn.disabled = true;
-    UIManager.setPdfProgress(0.02, '');
-    els.pdfProgressText.textContent = 'Preparing content...';
-    els.pdfProgress.classList.remove('hidden');
+    UIManager.setPdfProgress(0.02, "");
+    els.pdfProgressText.textContent = "Preparing content...";
+    els.pdfProgress.classList.remove("hidden");
 
     // A4 dimensions and margin constants — kept here so the PDF config object can
     // be built in one place before being passed down to the render service
-    const pageW  = 210;  // A4 width  in mm
-    const pageH  = 297;  // A4 height in mm
-    const margin = 24;   // ~1 inch (25.4 mm) — standard document margin
-    const printW = pageW - margin * 2;  // 162 mm printable width
-    const printH = pageH - margin * 2;  // 249 mm printable height
+    const pageW = 210; // A4 width  in mm
+    const pageH = 297; // A4 height in mm
+    const margin = 24; // ~1 inch (25.4 mm) — standard document margin
+    const printW = pageW - margin * 2; // 162 mm printable width
+    const printH = pageH - margin * 2; // 249 mm printable height
 
     let clone = null;
 
@@ -84,10 +97,11 @@ export class PdfGenerator {
       // Give the browser 100ms to fully compute the clone's layout before we
       // read any dimensions. requestAnimationFrame alone is unreliable for long
       // documents — getBoundingClientRect can return stale values on first paint.
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 100));
 
       const elW = clone.offsetWidth;
-      if (!elW) throw new Error('Nothing to render — the preview appears to be empty.');
+      if (!elW)
+        throw new Error("Nothing to render — the preview appears to be empty.");
 
       // ── 2b. Compute the pixel / mm ratio from the clone's known CSS width ─
       const pxPerMm = PdfLayoutService.computePxPerMm(clone, printW);
@@ -98,25 +112,31 @@ export class PdfGenerator {
 
       // Give the browser another 100ms to re-calculate layout after SVG resizing
       // before we take measurements for page-break calculation.
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 100));
 
       // Re-read elH NOW (after SVG resizing) — SVGs may be shorter, so the
       // document is shorter. Using the pre-resize elH would produce phantom pages.
       const elH = clone.scrollHeight;
-      if (!elH) throw new Error('Nothing to render — the preview appears to be empty.');
+      if (!elH)
+        throw new Error("Nothing to render — the preview appears to be empty.");
 
       // ── 2d. Calculate where we can safely break between pages ─────────────
-      const pageStarts = PdfLayoutService.computePageBreaks(clone, elH, pxPerMm, printH);
+      const pageStarts = PdfLayoutService.computePageBreaks(
+        clone,
+        elH,
+        pxPerMm,
+        printH,
+      );
 
       // ── 3. Render the entire clone onto one big 2× canvas ─────────────────
-      els.pdfProgressText.textContent = 'Rendering document...';
+      els.pdfProgressText.textContent = "Rendering document...";
       // Small delay so the browser can repaint the progress bar before the
       // synchronous html2canvas work begins
       await new Promise((r) => setTimeout(r, 50));
       const fullCanvas = await PdfRenderService.renderCanvas(clone, elW, elH);
 
       // ── 4. Slice canvas into pages and build the PDF ───────────────────────
-      els.pdfProgressText.textContent = 'Building PDF...';
+      els.pdfProgressText.textContent = "Building PDF...";
 
       // Read header/footer preferences from the modal UI
       const config = {
@@ -125,7 +145,7 @@ export class PdfGenerator {
         margin,
         printW,
         includeHeader: els.optHeader.checked,
-        headerTitle:   els.optHeaderTitle.value.trim() || 'Markdown Previewer',
+        headerTitle: els.optHeaderTitle.value.trim() || "Markdown Previewer",
         includeFooter: els.optFooter.checked,
       };
 
@@ -135,40 +155,23 @@ export class PdfGenerator {
         pxPerMm,
         config,
         // Progress callback: update the modal progress bar after each page
-        (frac, label) => UIManager.setPdfProgress(frac, label)
+        (frac, label) => UIManager.setPdfProgress(frac, label),
       );
 
       // ── 5. Deliver the finished PDF to the user ────────────────────────────
-      if (action === 'download') {
-        els.pdfProgressText.textContent = 'Saving file...';
-        UIManager.setPdfProgress(1, '');
+      if (action === "download") {
+        els.pdfProgressText.textContent = "Saving file...";
+        UIManager.setPdfProgress(1, "");
         await new Promise((r) => setTimeout(r, 0));
-        pdf.save('markdown-preview.pdf');
-
-      } else if (action === 'print') {
-        els.pdfProgressText.textContent = 'Opening print dialog...';
-        UIManager.setPdfProgress(1, '');
-        await new Promise((r) => setTimeout(r, 0));
-
-        // Inject the PDF as a Blob URL into a hidden iframe, then call print().
-        // This uses the browser's native PDF viewer so the user sees a proper
-        // print dialog with correct page sizing rather than a raw binary download.
-        const blobUrl = pdf.output('bloburl');
-        const iframe  = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.src = blobUrl;
-        document.body.appendChild(iframe);
-        iframe.onload = () => setTimeout(() => iframe.contentWindow.print(), 100);
+        pdf.save("markdown-preview.pdf");
       }
 
       UIManager.closePdfModal();
-
     } catch (err) {
       // Surface errors inside the progress bar rather than silently failing
-      console.error('PDF generation failed:', err);
+      console.error("PDF generation failed:", err);
       els.pdfProgressText.textContent = `Error: ${err.message}`;
-      UIManager.setPdfProgress(0, '');
-
+      UIManager.setPdfProgress(0, "");
     } finally {
       // ── 6. Always clean up ─────────────────────────────────────────────────
       els.pdfDirectBtn.disabled = false;

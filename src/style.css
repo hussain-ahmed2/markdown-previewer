@@ -29,6 +29,10 @@
   border-radius: 0.25rem;
   font-size: 0.875em;
 }
+.prose code::before,
+.prose code::after {
+  content: none !important;
+}
 .prose pre code {
   background-color: transparent;
   padding: 0;
@@ -322,6 +326,7 @@
     color: #2563eb !important;
   }
   #preview pre,
+  #preview code,
   #preview th,
   #preview tr:nth-child(even) td,
   #preview mark {
