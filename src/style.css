@@ -272,7 +272,7 @@
 }
 @media print {
   @page {
-    margin: 20mm;
+    margin: 0;
   }
   html,
   body {
@@ -296,6 +296,18 @@
     overflow: visible !important;
     padding: 0 !important;
     background: #ffffff !important;
+  }
+  .prose p,
+  .prose li,
+  .prose h1,
+  .prose h2,
+  .prose h3,
+  .prose h4,
+  .prose pre,
+  .prose blockquote,
+  .prose img {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
   #preview {
     width: 100% !important;

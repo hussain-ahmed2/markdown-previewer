@@ -64,12 +64,54 @@ export class PdfGenerator {
    *   'print'    → inject the PDF into a hidden iframe and call `window.print()`
    */
   static async exportDocument(action) {
-    // If the user wants to print, bypass the entire html2canvas pipeline
-    // and use the browser's native C++ print engine via the @media print CSS.
     if (action === "print") {
       UIManager.closePdfModal();
-      // Brief timeout to let the modal fade out before freezing the UI with the print dialog
-      setTimeout(() => window.print(), 150);
+
+      const originalHTML = els.preview.innerHTML;
+      
+      const customFontFamily = els.optFontFamily?.value || 'Inter';
+      const customFontSize = els.optFontSize?.value || '12';
+      const customTextColor = els.optTextColor?.value || '#6b7280';
+      const customPadding = els.optPadding?.value || '5.5';
+      const customHeaderBorder = els.optHeaderBorder?.checked ? '1px solid #e5e7eb' : 'none';
+      const customFooterBorder = els.optFooterBorder?.checked ? '1px solid #e5e7eb' : 'none';
+      
+      const spacerHeightStr = (parseFloat(customPadding) * 2 + 14) + 'mm';
+
+      const fixedHeader = els.optHeader.checked ? `
+        <div style="position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: ${customPadding}mm 20mm; font-size: ${customFontSize}px; color: ${customTextColor}; font-family: ${customFontFamily}, sans-serif; border-bottom: ${customHeaderBorder}; background: white; z-index: 1000;">
+          <span>${new Date().toLocaleDateString()}</span>
+          <span>${els.optHeaderTitle.value.trim() || 'Markdown Previewer'}</span>
+        </div>
+      ` : '';
+
+      const fixedFooter = els.optFooter.checked ? `
+        <div style="position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: flex-end; align-items: center; padding: ${customPadding}mm 20mm; font-size: ${customFontSize}px; color: ${customTextColor}; font-family: ${customFontFamily}, sans-serif; border-top: ${customFooterBorder}; background: white; z-index: 1000;">
+          <span>Document exported from Markdown Previewer</span>
+        </div>
+      ` : '';
+
+      // The spaces reserve physical room on every printed page so content doesn't overlap the fixed elements.
+      const topSpacer = els.optHeader.checked ? `<div style="height: ${spacerHeightStr};"></div>` : `<div style="height: 20mm;"></div>`;
+      const bottomSpacer = els.optFooter.checked ? `<div style="height: ${spacerHeightStr};"></div>` : `<div style="height: 20mm;"></div>`;
+
+      els.preview.innerHTML = `
+        ${fixedHeader}
+        ${fixedFooter}
+        <table style="width: 100%; border-collapse: collapse; border: none !important;">
+          <thead style="border: none !important;"><tr><td style="border: none !important; padding: 0;">${topSpacer}</td></tr></thead>
+          <tbody style="border: none !important;"><tr><td style="padding: 0 20mm; border: none !important;">
+            ${originalHTML}
+          </td></tr></tbody>
+          <tfoot style="border: none !important;"><tr><td style="border: none !important; padding: 0;">${bottomSpacer}</td></tr></tfoot>
+        </table>
+      `;
+
+      setTimeout(() => {
+        window.print();
+        els.preview.innerHTML = originalHTML; // perfectly restores the preview
+      }, 150);
+
       return;
     }
 
@@ -164,6 +206,10 @@ export class PdfGenerator {
         UIManager.setPdfProgress(1, "");
         await new Promise((r) => setTimeout(r, 0));
         pdf.save("markdown-preview.pdf");
+      } else {
+        const blob = pdf.output("bloburl");
+        const printWindow = window.open(blob);
+        printWindow.onload = () => printWindow.print();
       }
 
       UIManager.closePdfModal();

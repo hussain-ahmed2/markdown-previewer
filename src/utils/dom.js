@@ -24,5 +24,11 @@ export const els = {
   pdfProgressCount: document.getElementById('pdfProgressCount'),
   optHeader: document.getElementById('optHeader'),
   optHeaderTitle: document.getElementById('optHeaderTitle'),
-  optFooter: document.getElementById('optFooter')
+  optFooter: document.getElementById('optFooter'),
+  optHeaderBorder: document.getElementById('optHeaderBorder'),
+  optFooterBorder: document.getElementById('optFooterBorder'),
+  optFontFamily: document.getElementById('optFontFamily'),
+  optFontSize: document.getElementById('optFontSize'),
+  optTextColor: document.getElementById('optTextColor'),
+  optPadding: document.getElementById('optPadding')
 };
