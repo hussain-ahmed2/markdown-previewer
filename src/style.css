@@ -355,7 +355,7 @@
     page-break-inside: avoid !important;
     break-inside: avoid !important;
     max-width: 100% !important;
-    max-height: 80vh !important;
+    max-height: 24cm !important;
     height: auto !important;
   }
 }
