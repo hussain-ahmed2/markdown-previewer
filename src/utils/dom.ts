@@ -42,5 +42,8 @@ export const els = {
   optTextColor: document.getElementById('optTextColor') as HTMLInputElement,
   optPadding: document.getElementById('optPadding') as HTMLInputElement,
   optFooterText: document.getElementById('optFooterText') as HTMLInputElement,
-  optFooterAlign: document.getElementById('optFooterAlign') as HTMLSelectElement
+  optFooterAlign: document.getElementById('optFooterAlign') as HTMLSelectElement,
+
+  // Resize handle
+  dragHandle: document.getElementById('dragHandle') as HTMLDivElement,
 };

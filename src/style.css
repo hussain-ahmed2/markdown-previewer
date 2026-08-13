@@ -11,7 +11,6 @@
   font-family: "Inter", sans-serif;
 }
 .editor-pane {
-  resize: horizontal;
   overflow: hidden;
 }
 .preview-pane {
@@ -19,7 +18,7 @@
 }
 @media (max-width: 768px) {
   .editor-pane {
-    resize: vertical;
+    width: 100% !important;
   }
 }
 .prose pre {

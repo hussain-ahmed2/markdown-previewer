@@ -113,5 +113,44 @@ export class UIManager {
     });
 
     els.openFileBtn.addEventListener("click", () => els.fileInput.click());
+    this.setupResizeHandle();
+  }
+
+  /**
+   * Sets up the draggable resize handle between editor and preview panes.
+   */
+  static setupResizeHandle() {
+    const handle = els.dragHandle;
+    const editorPane = handle.previousElementSibling as HTMLElement;
+    const main = handle.parentElement as HTMLElement;
+
+    let isDragging = false;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      const mainRect = main.getBoundingClientRect();
+      const handleWidth = handle.offsetWidth;
+      // Clamp between 20% and 80%
+      const ratio = Math.min(0.8, Math.max(0.2, (e.clientX - mainRect.left) / mainRect.width));
+      editorPane.style.width = `calc(${ratio * 100}% - ${handleWidth / 2}px)`;
+      editorPane.style.flexShrink = "0";
+      editorPane.style.flexGrow = "0";
+    };
+
+    const onMouseUp = () => {
+      isDragging = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    handle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      isDragging = true;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    });
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
   }
 }

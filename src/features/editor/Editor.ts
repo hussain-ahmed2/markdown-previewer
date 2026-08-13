@@ -35,6 +35,31 @@ export class Editor {
   static setupInputListener() {
     const debouncedRender = debounce(() => this.handleInput(), 150);
     els.editor.addEventListener('input', debouncedRender);
+
+    // Tab indent / Shift+Tab unindent
+    els.editor.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      e.preventDefault();
+
+      const { selectionStart, selectionEnd, value } = els.editor;
+
+      if (!e.shiftKey) {
+        // Insert two spaces at cursor
+        els.editor.value = value.substring(0, selectionStart) + '  ' + value.substring(selectionEnd);
+        els.editor.selectionStart = els.editor.selectionEnd = selectionStart + 2;
+      } else {
+        // Remove up to two leading spaces from the current line
+        const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
+        const line = value.substring(lineStart);
+        const spacesToRemove = line.startsWith('  ') ? 2 : line.startsWith(' ') ? 1 : 0;
+        if (spacesToRemove > 0) {
+          els.editor.value = value.substring(0, lineStart) + value.substring(lineStart + spacesToRemove);
+          els.editor.selectionStart = els.editor.selectionEnd = Math.max(lineStart, selectionStart - spacesToRemove);
+        }
+      }
+
+      this.handleInput();
+    });
   }
 
   /**

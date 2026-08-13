@@ -39,7 +39,7 @@
       }
     </script>
   </head>
-  <body class="font-sans bg-gray-50 min-h-screen dark:bg-gray-900">
+  <body class="font-sans bg-gray-50 min-h-screen overflow-hidden dark:bg-gray-900">
     <header
       class="bg-white border-b border-gray-200 sticky top-0 z-10 dark:bg-gray-800 dark:border-gray-700"
     >
@@ -171,16 +171,9 @@
           class="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-2 text-sm text-gray-500 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-400"
         >
           <span>Editor</span>
-          <kbd
-            class="px-2 py-0.5 bg-gray-200 rounded text-xs font-mono dark:bg-gray-700 dark:text-gray-200"
-            >Tab</kbd
+          <span class="ml-auto text-xs text-gray-400 dark:text-gray-500 hidden sm:inline"
+            ><kbd class="px-1.5 py-0.5 bg-gray-200 rounded font-mono dark:bg-gray-700 dark:text-gray-300">Tab</kbd> indent · <kbd class="px-1.5 py-0.5 bg-gray-200 rounded font-mono dark:bg-gray-700 dark:text-gray-300">⇧Tab</kbd> unindent</span
           >
-          indent ·
-          <kbd
-            class="px-2 py-0.5 bg-gray-200 rounded text-xs font-mono dark:bg-gray-700 dark:text-gray-200"
-            >Shift+Tab</kbd
-          >
-          unindent
         </div>
         <textarea
           id="editor"
@@ -190,15 +183,21 @@
         ></textarea>
       </div>
 
+      <!-- Drag handle for resizing -->
       <div
-        class="preview-pane w-1/2 bg-gray-50 flex flex-col min-w-0 dark:bg-gray-900"
+        id="dragHandle"
+        class="w-1.5 cursor-col-resize bg-gray-200 hover:bg-blue-400 active:bg-blue-500 transition-colors flex-shrink-0 dark:bg-gray-700 dark:hover:bg-blue-500 dark:active:bg-blue-400"
+        title="Drag to resize"
+      ></div>
+
+      <div
+        class="preview-pane flex-1 bg-gray-50 flex flex-col min-w-0 dark:bg-gray-900"
       >
         <div
           id="previewHeader"
-          class="px-3 py-2 bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700"
+          class="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-2 text-sm text-gray-500 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-400"
         >
-          <span class="text-sm font-medium text-gray-700 dark:text-gray-200"
-            >Preview</span
+          <span>Preview</span
           >
         </div>
         <div
