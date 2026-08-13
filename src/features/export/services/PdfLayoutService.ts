@@ -67,33 +67,39 @@ export class PdfLayoutService {
    * @param {number}      pxPerMm  - Pixels per millimetre (from `computePxPerMm`).
    * @param {number}      printH   - Printable page height in mm.
    */
-  static lockElementDimensions(clone: HTMLElement, pxPerMm: number, printH: number) {
+  static lockElementDimensions(
+    clone: HTMLElement,
+    pxPerMm: number,
+    printH: number,
+  ) {
     const maxSlicePxH = printH * pxPerMm;
     const safeMaxHeight = maxSlicePxH * 0.9;
 
-    clone.querySelectorAll(".mermaid-diagram svg, .prose img").forEach((el: any) => {
-      const rect = el.getBoundingClientRect();
-      if (rect.height > safeMaxHeight) {
-        const ratio = safeMaxHeight / rect.height;
-        const newW = rect.width * ratio;
+    clone
+      .querySelectorAll(".mermaid-diagram svg, .prose img")
+      .forEach((el: any) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.height > safeMaxHeight) {
+          const ratio = safeMaxHeight / rect.height;
+          const newW = rect.width * ratio;
 
-        if (el.tagName.toLowerCase() === "svg") {
-          el.setAttribute("height", safeMaxHeight);
-          el.setAttribute("width", newW);
+          if (el.tagName.toLowerCase() === "svg") {
+            el.setAttribute("height", safeMaxHeight);
+            el.setAttribute("width", newW);
+          }
+          el.style.height = safeMaxHeight + "px";
+          el.style.width = newW + "px";
+          el.style.maxHeight = safeMaxHeight + "px";
+          el.style.objectFit = "contain";
+
+          if (el.closest(".mermaid-diagram")) {
+            const container = el.closest(".mermaid-diagram");
+            container.style.height = safeMaxHeight + "px";
+            container.style.maxHeight = safeMaxHeight + "px";
+            container.style.overflow = "hidden";
+          }
         }
-        el.style.height = safeMaxHeight + "px";
-        el.style.width = newW + "px";
-        el.style.maxHeight = safeMaxHeight + "px";
-        el.style.objectFit = "contain";
-        
-        if (el.closest('.mermaid-diagram')) {
-          const container = el.closest('.mermaid-diagram');
-          container.style.height = safeMaxHeight + "px";
-          container.style.maxHeight = safeMaxHeight + "px";
-          container.style.overflow = "hidden";
-        }
-      }
-    });
+      });
   }
 
   /**
@@ -105,7 +111,12 @@ export class PdfLayoutService {
    * @param {number}      printH   - Printable page height in mm.
    * @returns {number[]} Ascending list of y-pixel offsets; length = number of pages + 1.
    */
-  static computePageBreaks(clone: HTMLElement, elH: number, pxPerMm: number, printH: number) {
+  static computePageBreaks(
+    clone: HTMLElement,
+    elH: number,
+    pxPerMm: number,
+    printH: number,
+  ) {
     const maxSlicePxH = printH * pxPerMm;
     const minFill = maxSlicePxH * 0.55;
 
@@ -133,7 +144,10 @@ export class PdfLayoutService {
           const bottom = rect.bottom - cloneRect.top;
           bounds.push({ top, bottom });
 
-          if (el.classList.contains('mermaid-diagram') || el.classList.contains('img')) {
+          if (
+            el.classList.contains("mermaid-diagram") ||
+            el.classList.contains("img")
+          ) {
             mediaElements.push({ top, bottom, el });
           }
         });
@@ -145,36 +159,54 @@ export class PdfLayoutService {
     let current = 0;
     while (current < elH - 1) {
       const pageEnd = Math.min(current + maxSlicePxH, elH);
-      
+
       // ── DYNAMIC SHRINK LOGIC ──────────────────────────────────────────────────
       let didShrink = false;
       for (const media of mediaElements) {
-        if (media.top > current && media.top < pageEnd && media.bottom > pageEnd) {
+        if (
+          media.top > current &&
+          media.top < pageEnd &&
+          media.bottom > pageEnd
+        ) {
           const availableSpace = pageEnd - media.top;
           if (availableSpace >= maxSlicePxH * 0.4) {
             const el = media.el;
-            const targetEl = el.classList.contains('mermaid-diagram') ? el.querySelector('svg') : el;
+            const targetEl = el.classList.contains("mermaid-diagram")
+              ? el.querySelector("svg")
+              : el;
             if (targetEl) {
               const rect = targetEl.getBoundingClientRect();
-              const newH = availableSpace - 4; 
+              const newH = availableSpace - 4;
               if (newH < rect.height) {
                 const ratio = newH / rect.height;
                 if (ratio >= 0.5) {
                   const newW = rect.width * ratio;
-                  if (targetEl.tagName.toLowerCase() === 'svg') {
-                    targetEl.setAttribute('width', newW);
-                    targetEl.setAttribute('height', newH);
+                  if (targetEl.tagName.toLowerCase() === "svg") {
+                    targetEl.setAttribute("width", newW);
+                    targetEl.setAttribute("height", newH);
                   }
-                  targetEl.style.setProperty('width', newW + 'px', 'important');
-                  targetEl.style.setProperty('height', newH + 'px', 'important');
-                  targetEl.style.setProperty('max-height', newH + 'px', 'important');
-                  
-                  if (el.classList.contains('mermaid-diagram')) {
-                    el.style.setProperty('height', newH + 'px', 'important');
-                    el.style.setProperty('max-height', newH + 'px', 'important');
-                    el.style.setProperty('overflow', 'hidden', 'important');
+                  targetEl.style.setProperty("width", newW + "px", "important");
+                  targetEl.style.setProperty(
+                    "height",
+                    newH + "px",
+                    "important",
+                  );
+                  targetEl.style.setProperty(
+                    "max-height",
+                    newH + "px",
+                    "important",
+                  );
+
+                  if (el.classList.contains("mermaid-diagram")) {
+                    el.style.setProperty("height", newH + "px", "important");
+                    el.style.setProperty(
+                      "max-height",
+                      newH + "px",
+                      "important",
+                    );
+                    el.style.setProperty("overflow", "hidden", "important");
                   }
-                  
+
                   elH = clone.scrollHeight;
                   getBounds();
                   didShrink = true;
@@ -185,41 +217,49 @@ export class PdfLayoutService {
           }
         }
       }
-      
+
       if (didShrink) continue;
       // ─────────────────────────────────────────────────────────────────────────
 
       let next = pageEnd;
       let validBreak = -1;
-      
+
       // Preferred: find a boundary that satisfies minFill
       for (const b of bounds) {
-        // Flat array bounds logic was mathematically flawed. 
+        // Flat array bounds logic was mathematically flawed.
         // We now use the object structure ({top, bottom}) natively.
         if (b.bottom <= pageEnd && b.bottom >= current + minFill) {
           validBreak = Math.floor(b.bottom);
-        } else if (b.top < pageEnd && b.bottom > pageEnd - 10 && b.top >= current + minFill) {
+        } else if (
+          b.top < pageEnd &&
+          b.bottom > pageEnd - 10 &&
+          b.top >= current + minFill
+        ) {
           validBreak = Math.floor(b.top);
           break; // Found the crossing element, stop searching
         }
       }
-      
+
       // Fallback: if no boundary satisfies minFill
       if (validBreak === -1) {
         for (const b of bounds) {
           if (b.bottom <= pageEnd && b.bottom > current) {
             validBreak = Math.floor(b.bottom);
-          } else if (b.top < pageEnd && b.bottom > pageEnd - 10 && b.top > current) {
+          } else if (
+            b.top < pageEnd &&
+            b.bottom > pageEnd - 10 &&
+            b.top > current
+          ) {
             validBreak = Math.floor(b.top);
             break; // Found the crossing element, stop searching
           }
         }
       }
-      
+
       if (validBreak !== -1 && validBreak > current) {
         next = validBreak;
       }
-      
+
       if (next <= current) next = pageEnd;
       starts.push(next);
       current = next;
