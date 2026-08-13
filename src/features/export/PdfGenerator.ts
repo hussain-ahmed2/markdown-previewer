@@ -1,0 +1,308 @@
+import { els } from "../../utils/dom.js";
+import { UIManager } from "../ui/UIManager.js";
+import { PdfCloneService } from "./services/PdfCloneService.js";
+import { PdfLayoutService } from "./services/PdfLayoutService.js";
+import { PdfRenderService } from "./services/PdfRenderService.js";
+import { MarkdownRenderer } from "../preview/MarkdownRenderer.js";
+
+/**
+ * @module PdfGenerator
+ *
+ * Top-level orchestrator for the PDF export feature.
+ *
+ * This class is intentionally thin — it owns only two responsibilities:
+ *  1. Registering the user-facing button event listeners.
+ *  2. Sequencing the three lower-level services in the correct order.
+ *
+ * The heavy lifting is delegated to:
+ *  - {@link PdfCloneService}  — DOM cloning and print CSS injection
+ *  - {@link PdfLayoutService} — SVG scaling and page-break boundary detection
+ *  - {@link PdfRenderService} — html2canvas rendering and jsPDF assembly
+ *
+ * PDF pipeline (high level):
+ *
+ *  ┌─────────────────────┐
+ *  │  1. Clone the DOM   │  PdfCloneService.build()
+ *  └────────┬────────────┘
+ *           │
+ *  ┌────────▼────────────┐
+ *  │  2. Fix SVG sizes   │  PdfLayoutService.lockElementDimensions()
+ *  │  3. Find breaks     │  PdfLayoutService.computePageBreaks()
+ *  └────────┬────────────┘
+ *           │
+ *  ┌────────▼────────────┐
+ *  │  4. Render canvas   │  PdfRenderService.renderCanvas()
+ *  │  5. Slice + export  │  PdfRenderService.buildPdf()
+ *  └─────────────────────┘
+ */
+export class PdfGenerator {
+  /**
+   * Attaches click handlers to the "Direct Download" and "Send to Printer" buttons.
+   * Called once during application initialisation.
+   */
+  static init() {
+    els.pdfDirectBtn.addEventListener("click", () =>
+      this.exportDocument("download"),
+    );
+    els.pdfPrintBtn.addEventListener("click", () =>
+      this.exportDocument("print"),
+    );
+  }
+
+  /**
+   * Runs the full PDF export pipeline.
+   *
+   * Flow:
+   *  1. Show the progress bar and disable UI buttons while work is in progress.
+   *  2. Clone the preview, fix SVG dimensions, and compute page breaks.
+   *  3. Render the clone onto a monolithic 2× canvas.
+   *  4. Slice the canvas into per-page images and assemble a jsPDF document.
+   */
+  static async exportDocument(action: 'download' | 'print') {
+    // FORCE A FRESH RENDER! This saves us from Vite HMR stale DOM issues!
+    await MarkdownRenderer.render(els.editor.value);
+
+    if (action === "print") {
+      UIManager.closePdfModal();
+
+      // Force light mode for printing — remove dark class so all .dark .prose
+      // and .dark .markdown-alert CSS rules are inactive during the print dialog
+      const wasDark = document.documentElement.classList.contains("dark");
+      if (wasDark) {
+        document.documentElement.classList.remove("dark");
+      }
+
+      // Re-render Mermaid diagrams in light mode.
+      // The SVGs have dark-mode colors baked into inline styles from the live render,
+      // so we must physically re-render them with the light theme.
+      const mermaidDivs = els.preview.querySelectorAll(".mermaid-diagram");
+      if (wasDark && mermaidDivs.length > 0) {
+        const mermaidModule = await import("mermaid");
+        const mermaidLib = mermaidModule.default;
+        mermaidLib.initialize({ theme: "default", startOnLoad: false });
+        for (let i = 0; i < mermaidDivs.length; i++) {
+          const div = mermaidDivs[i] as HTMLElement;
+          const src = div.getAttribute("data-mermaid-src");
+          if (src) {
+            try {
+              const id = `mermaid-print-${Date.now()}-${i}`;
+              const decodedSrc = decodeURIComponent(src);
+              const { svg } = await mermaidLib.render(id, decodedSrc);
+              div.innerHTML = svg;
+            } catch (e) {
+              console.error("Failed to re-render mermaid for print", e);
+            }
+          }
+        }
+      }
+
+      const customFontFamily = els.optFontFamily?.value || "Inter";
+      const customFontSize = els.optFontSize?.value || "12";
+      const customTextColor = els.optTextColor?.value || "#6b7280";
+      const customPadding = els.optPadding?.value || "5.5";
+      const customHeaderBorder = els.optHeaderBorder?.checked
+        ? "1px solid #e5e7eb"
+        : "none";
+      const customFooterBorder = els.optFooterBorder?.checked
+        ? "1px solid #e5e7eb"
+        : "none";
+
+      const customFooterText =
+        els.optFooterText?.value || "Document exported from Markdown Previewer";
+      const customFooterAlign = els.optFooterAlign?.value || "space-between";
+
+      const flexJustify =
+        customFooterAlign === "left"
+          ? "flex-start"
+          : customFooterAlign === "center"
+            ? "center"
+            : customFooterAlign === "right"
+              ? "flex-end"
+              : "space-between";
+
+      const spacerHeightStr = parseFloat(customPadding) * 2 + 14 + "mm";
+
+      const fixedHeader = els.optHeader.checked
+        ? `
+        <div style="position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: ${customPadding}mm 20mm; font-size: ${customFontSize}px; color: ${customTextColor}; font-family: ${customFontFamily}, sans-serif; border-bottom: ${customHeaderBorder}; background: white; z-index: 1000;">
+          <span>${new Date().toLocaleDateString()}</span>
+          <span>${els.optHeaderTitle.value.trim() || "Markdown Previewer"}</span>
+        </div>
+      `
+        : "";
+
+      const fixedFooter = els.optFooter.checked
+        ? `
+        <div style="position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: ${flexJustify}; align-items: center; padding: ${customPadding}mm 20mm; font-size: ${customFontSize}px; color: ${customTextColor}; font-family: ${customFontFamily}, sans-serif; border-top: ${customFooterBorder}; background: white; z-index: 1000;">
+          <span>${customFooterText}</span>
+        </div>
+      `
+        : "";
+
+      const topSpacer = els.optHeader.checked
+        ? `<div style="height: ${spacerHeightStr};"></div>`
+        : `<div style="height: 20mm;"></div>`;
+      const bottomSpacer = els.optFooter.checked
+        ? `<div style="height: ${spacerHeightStr};"></div>`
+        : `<div style="height: 20mm;"></div>`;
+
+      // NOW capture the HTML — it's in light mode with light Mermaid SVGs
+      const originalHTML = els.preview.innerHTML;
+
+      els.preview.innerHTML = `
+        ${fixedHeader}
+        ${fixedFooter}
+        <table style="width: 100%; border-collapse: collapse; border: none !important;">
+          <thead style="border: none !important;"><tr><td style="border: none !important; padding: 0;">${topSpacer}</td></tr></thead>
+          <tbody style="border: none !important;"><tr><td style="padding: 0 20mm; border: none !important;">
+            ${originalHTML}
+          </td></tr></tbody>
+          <tfoot style="border: none !important;"><tr><td style="border: none !important; padding: 0;">${bottomSpacer}</td></tr></tfoot>
+        </table>
+      `;
+
+      setTimeout(async () => {
+        window.print();
+
+        // Restore dark mode and re-render Mermaid back to dark theme
+        if (wasDark) {
+          document.documentElement.classList.add("dark");
+          // Re-render the preview with dark Mermaid diagrams
+          await MarkdownRenderer.render(els.editor.value);
+        } else {
+          els.preview.innerHTML = originalHTML;
+        }
+      }, 150);
+
+      return;
+    }
+
+    // ── 1. UI: show progress, lock buttons ───────────────────────────────────
+    els.pdfDirectBtn.disabled = true;
+    els.pdfPrintBtn.disabled = true;
+    UIManager.setPdfProgress(0.02, "");
+    els.pdfProgressText.textContent = "Preparing content...";
+    els.pdfProgress.classList.remove("hidden");
+
+    // A4 dimensions and margin constants — kept here so the PDF config object can
+    // be built in one place before being passed down to the render service
+    const pageW = 210; // A4 width  in mm
+    const pageH = 297; // A4 height in mm
+    const margin = 24; // ~1 inch (25.4 mm) — standard document margin
+    const printW = pageW - margin * 2; // 162 mm printable width
+    const printH = pageH - margin * 2; // 249 mm printable height
+
+    let clone = null;
+
+    try {
+      // ── 2a. Clone the preview pane with strict light-mode styles ─────────
+      clone = PdfCloneService.build();
+
+      // Give the browser 100ms to fully compute the clone's layout before we
+      // read any dimensions. requestAnimationFrame alone is unreliable for long
+      // documents — getBoundingClientRect can return stale values on first paint.
+      await new Promise((r) => setTimeout(r, 100));
+
+      const elW = clone.offsetWidth;
+      if (!elW)
+        throw new Error("Nothing to render — the preview appears to be empty.");
+
+      // ── 2b. Compute the pixel / mm ratio from the clone's known CSS width ─
+      const pxPerMm = PdfLayoutService.computePxPerMm(clone, printW);
+
+      // ── 2c. Lock SVG/image dimensions before measuring break boundaries ───
+      // MUST happen before computePageBreaks so getBoundingClientRect is accurate.
+      PdfLayoutService.lockElementDimensions(clone, pxPerMm, printH);
+
+      // Give the browser another 100ms to re-calculate layout after SVG resizing
+      // before we take measurements for page-break calculation.
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Re-read elH NOW (after SVG resizing) — SVGs may be shorter, so the
+      // document is shorter. Using the pre-resize elH would produce phantom pages.
+      const elH = clone.scrollHeight;
+      if (!elH)
+        throw new Error("Nothing to render — the preview appears to be empty.");
+
+      // ── 2d. Calculate where we can safely break between pages ─────────────
+      const pageStarts = PdfLayoutService.computePageBreaks(
+        clone,
+        elH,
+        pxPerMm,
+        printH,
+      );
+
+      // ── 3. Render the entire clone onto one big 2× canvas ─────────────────
+      els.pdfProgressText.textContent = "Rendering document...";
+      // Small delay so the browser can repaint the progress bar before the
+      // synchronous html2canvas work begins
+      await new Promise((r) => setTimeout(r, 50));
+      const fullCanvas = await PdfRenderService.renderCanvas(clone, elW, elH);
+
+      // ── 4. Slice canvas into pages and build the PDF ───────────────────────
+      els.pdfProgressText.textContent = "Building PDF...";
+
+      // Read header/footer preferences from the modal UI
+      const config = {
+        pageW,
+        pageH,
+        margin,
+        printW,
+        includeHeader: els.optHeader.checked,
+        headerTitle: els.optHeaderTitle.value.trim() || "Markdown Previewer",
+        includeFooter: els.optFooter.checked,
+        footerText:
+          els.optFooterText?.value ||
+          "Document exported from Markdown Previewer",
+        footerAlign: els.optFooterAlign?.value || "space-between",
+        fontFamily: els.optFontFamily?.value || "Inter",
+        fontSize: parseInt(els.optFontSize?.value) || 12,
+        textColor: els.optTextColor?.value || "#6b7280",
+        padding: parseFloat(els.optPadding?.value) || 5.5,
+        headerBorder: els.optHeaderBorder?.checked !== false,
+        footerBorder: els.optFooterBorder?.checked !== false,
+      };
+
+      const pdf = await PdfRenderService.buildPdf(
+        fullCanvas,
+        pageStarts,
+        pxPerMm,
+        config,
+        // Progress callback: update the modal progress bar after each page
+        (frac, label) => UIManager.setPdfProgress(frac, label),
+      );
+
+      // ── 5. Deliver the finished PDF to the user ────────────────────────────
+      if (action === "download") {
+        els.pdfProgressText.textContent = "Saving file...";
+        UIManager.setPdfProgress(1, "");
+        await new Promise((r) => setTimeout(r, 0));
+        pdf.save("markdown-preview.pdf");
+      } else {
+        const printWindow = document.getElementById(
+          "printIframe",
+        ) as HTMLIFrameElement;
+        
+        if (printWindow) {
+          const blob = pdf.output("blob");
+          const url = URL.createObjectURL(blob);
+          printWindow.src = url;
+          printWindow.onload = () => printWindow.contentWindow?.print();
+        }
+      }
+
+      UIManager.closePdfModal();
+    } catch (err) {
+      // Surface errors inside the progress bar rather than silently failing
+      console.error("PDF generation failed:", err);
+      els.pdfProgressText.textContent = `Error: ${(err as Error).message}`;
+      UIManager.setPdfProgress(0, "");
+    } finally {
+      // ── 6. Always clean up ─────────────────────────────────────────────────
+      els.pdfDirectBtn.disabled = false;
+      els.pdfPrintBtn.disabled = false;
+      // Remove the off-screen DOM clone to free memory
+      if (clone) PdfCloneService.destroy(clone);
+    }
+  }
+}
