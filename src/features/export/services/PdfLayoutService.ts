@@ -73,43 +73,31 @@ export class PdfLayoutService {
     printH: number,
   ) {
     const maxSlicePxH = printH * pxPerMm;
-    // Scale SVGs down to max 60% of a page so they easily fit alongside headings
-    const safeMaxHeight = maxSlicePxH * 0.6;
+    const safeMaxHeight = maxSlicePxH * 0.9;
 
     clone
       .querySelectorAll(".mermaid-diagram svg, .prose img")
       .forEach((el: any) => {
         const rect = el.getBoundingClientRect();
-        
-        let finalH = rect.height;
-        let finalW = rect.width;
-        
-        // Scale down if it exceeds safe page limits
         if (rect.height > safeMaxHeight) {
           const ratio = safeMaxHeight / rect.height;
-          finalH = safeMaxHeight;
-          finalW = rect.width * ratio;
-        }
-        
-        // Force html2canvas to respect the computed dimensions
-        if (el.tagName.toLowerCase() === "svg") {
-          el.setAttribute("height", finalH);
-          el.setAttribute("width", finalW);
-        }
-        el.style.setProperty("height", finalH + "px", "important");
-        el.style.setProperty("width", finalW + "px", "important");
-        el.style.setProperty("max-height", finalH + "px", "important");
-        el.style.setProperty("max-width", "100%", "important");
-        
-        if (el.tagName.toLowerCase() === "img") {
-          el.style.objectFit = "contain";
-        }
+          const newW = rect.width * ratio;
 
-        if (el.closest(".mermaid-diagram")) {
-          const container = el.closest(".mermaid-diagram");
-          container.style.setProperty("height", finalH + "px", "important");
-          container.style.setProperty("max-height", finalH + "px", "important");
-          container.style.setProperty("overflow", "hidden", "important");
+          if (el.tagName.toLowerCase() === "svg") {
+            el.setAttribute("height", safeMaxHeight);
+            el.setAttribute("width", newW);
+          }
+          el.style.height = safeMaxHeight + "px";
+          el.style.width = newW + "px";
+          el.style.maxHeight = safeMaxHeight + "px";
+          el.style.objectFit = "contain";
+
+          if (el.closest(".mermaid-diagram")) {
+            const container = el.closest(".mermaid-diagram");
+            container.style.height = safeMaxHeight + "px";
+            container.style.maxHeight = safeMaxHeight + "px";
+            container.style.overflow = "hidden";
+          }
         }
       });
   }
