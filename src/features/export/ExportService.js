@@ -26,10 +26,26 @@ export class ExportService {
       els.preview.style.maxHeight = 'none';
       els.preview.style.overflow = 'visible';
 
-      const dataUrl = await window.htmlToImage.toPng(els.preview, {
-        pixelRatio: 2,
-        backgroundColor: document.documentElement.classList.contains("dark") ? "#111827" : "#ffffff",
-      });
+      const originalFetch = window.fetch;
+      window.fetch = async (...args) => {
+        try {
+          const res = await originalFetch(...args);
+          if (!res.ok) return new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+          return res;
+        } catch (e) {
+          return new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+        }
+      };
+
+      let dataUrl;
+      try {
+        dataUrl = await window.htmlToImage.toPng(els.preview, {
+          pixelRatio: 2,
+          backgroundColor: document.documentElement.classList.contains("dark") ? "#111827" : "#ffffff",
+        });
+      } finally {
+        window.fetch = originalFetch;
+      }
       
       // Restore styles
       els.preview.style.height = originalHeight;
