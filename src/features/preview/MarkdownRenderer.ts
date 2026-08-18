@@ -83,7 +83,9 @@ export class MarkdownRenderer {
         if (!preNode || !preNode.parentNode) continue;
 
         const code = codeBlocks[i].textContent || '';
-        const graphDefinition = DOMPurify.sanitize(code, { ALLOWED_TAGS: [] }).trim();
+        const graphDefinition = DOMPurify.sanitize(code, { ALLOWED_TAGS: ["br"] })
+          .replace(/&gt;/g, ">")
+          .trim();
 
         try {
           const id = `mermaid-${Date.now()}-${i}`;

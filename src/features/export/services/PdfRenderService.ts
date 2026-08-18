@@ -66,6 +66,9 @@ export class PdfRenderService {
           const { svg } = await mermaid.render(id, lightSrc);
           div.innerHTML = svg;
 
+          // Force browser layout so getBoundingClientRect() returns correct size
+          await new Promise((r) => requestAnimationFrame(r));
+
           // ULTIMATE FIX: Mermaid injects a <style> block into the document head.
           // This style block often contains @media (prefers-color-scheme: dark) rules.
           // When htmlToImage captures the DOM, it copies these rules. Then, when the browser 
@@ -78,6 +81,12 @@ export class PdfRenderService {
               "@media (max-width: 1px)" // A media query that will practically never match
             );
           }
+
+          // html-to-image cannot rasterize Mermaid's freshly rendered inline SVG
+          // (it carries width="100%" and no explicit height), which leaves the
+          // diagram completely blank in the exported PDF. Convert it to a PNG
+          // <img> of the same rendered size before the capture instead.
+          await this.rasterizeDiagram(div);
         } catch (e) {
           console.error("Failed to re-render mermaid for PDF", e);
         }
@@ -96,6 +105,12 @@ export class PdfRenderService {
           width: `${elW}px`,
           height: `${elH}px`,
         },
+        // A single broken <img> (offline/CORS/404) must not abort the whole PDF.
+        // Substitute a transparent 1×1 pixel and swallow the image error instead
+        // of letting html-to-image reject the entire export with an Event.
+        imagePlaceholder:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAAAAgAB4iYFmwAAAABJRU5ErkJggg==",
+        onImageErrorHandler: () => {},
       });
     } finally {
       // Restore all dark mode states immediately so the user never sees a flash
@@ -131,6 +146,50 @@ export class PdfRenderService {
     ctx.drawImage(img, 0, 0);
 
     return canvas;
+  }
+
+  /**
+   * Converts the freshly re-rendered Mermaid SVG inside a `.mermaid-diagram`
+   * container into a rasterized PNG `<img>` of the same rendered size.
+   *
+   * html-to-image captures the clone via a single `<foreignObject>` SVG and fails
+   * to rasterize Mermaid's inline SVGs (they carry `width="100%"` with no explicit
+   * height), leaving the diagram blank in the exported PDF. Rasterising each
+   * diagram to a PNG image first lets html-to-image render it reliably.
+   *
+   * @param {HTMLElement} div - The `.mermaid-diagram` container holding the SVG.
+   */
+  static async rasterizeDiagram(div: HTMLElement) {
+    const svg = div.querySelector("svg");
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const width = Math.round(rect.width);
+    const height = Math.round(rect.height);
+    if (width <= 0 || height <= 0) return;
+
+    const serialized = new XMLSerializer().serializeToString(svg);
+    const image = new Image();
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serialized)}`;
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () =>
+        reject(new Error("Failed to rasterize Mermaid diagram"));
+    });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(image, 0, 0, width, height);
+
+    const img = document.createElement("img");
+    img.src = canvas.toDataURL("image/png");
+    img.style.width = `${width}px`;
+    img.style.height = `${height}px`;
+    div.replaceChild(img, svg);
   }
 
   /**
